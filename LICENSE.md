@@ -4,7 +4,7 @@ License text copyright © 2024 MariaDB plc, All Rights Reserved. “Business Sou
 
 Licensor: Software Decisions, Inc.
 Licensed Work: GPAL - Generally Positive Automation Library
-               Copyright © 2026 Software Decisions, Inc. All rights reserved.
+Copyright © 2026 Software Decisions, Inc. All rights reserved.
 
 ### Terms
 
