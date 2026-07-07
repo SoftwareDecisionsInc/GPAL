@@ -20,8 +20,10 @@ For more on BSL: [MariaDB BSL FAQ](https://mariadb.com/bsl-faq-adopting/)
 ## Credits & Acknowledgments
 
 - **GPAL** library — Conceived, architected, and primarily implemented over six years by **Michael B. Vederman**, CEO of Software Decisions, Inc.
-- **OttoMatic** browser extension recorder — Started by Wei Fan, completed by Michael B. Vederman
-- **OttoMagic** browser extension REST API — Developed by Scott Ramirtha
+- **OttoMatic** browser extension web recorder — Developed by Michael B. Vederman
+- **OttoMatic Desktop** Windows application recorder — Developed by Michael B. Vederman
+- **OttoMagic** browser extension REST API executor — Developed by Scott Ramirtha
+- **GPALRestApi** browser REST API server — Developed by Michael B. Vederman
 - **GPAL Studio** — Developed by Bryan Alvarez Pandozi
 
 ## Important Notes
