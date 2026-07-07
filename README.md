@@ -8,7 +8,7 @@ Copyright © 2026 Software Decisions, Inc. (SDi). All rights reserved.
 
 GPAL is released under the **Business Source License 1.1 (BSL 1.1)**.
 
-- **Source-available** — full source code is public for viewing, modification, and non-production use.
+- **Source-available** — full source code is public for viewing, modification, and production use.
 - **Production use** is permitted under our **Additional Use Grant** (see [LICENSE](./LICENSE.md) for full text):  
   You may use GPAL in commercial, internal, hosted, revenue-generating, or mission-critical production environments — provided it is **not** offered to third parties as a competing product, library, framework, tool, SDK, service, managed offering, or commercial substitute that directly competes with or undercuts SDi's GPAL products/services.
 - On the **Change Date** (the earlier of January 1, 2031 or four years after first public distribution of a version), the license automatically transitions to the **GNU General Public License v3.0 or later** (GPLv3+), making it fully open source.
