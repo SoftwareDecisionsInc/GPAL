@@ -34,7 +34,8 @@ For more on BSL: [MariaDB BSL FAQ](https://mariadb.com/bsl-faq-adopting/)
 - For questions, support, or permissions beyond the grant: contact [gpal][@][sditx.com].
 
 ## Getting Started
+[GPAL Website: Getting Started](https://gpal.sditx.com/docs/concepts/getting-started)
 
-(Coming soon — installation via NuGet, basic usage examples, quickstart guide)
+(Coming soon — installation via NuGet)
 
-Stay tuned for more docs, examples, and releases!
+
