@@ -1,3 +1,41 @@
+# GPAL End-User License Agreement (EULA)
+
+**Version 1.0** - Effective: July 2026  
+**Software Decisions, Inc. (SDi)**  
+Copyright (c) 2026 Software Decisions, Inc. All rights reserved.
+
+GPAL (Generally Positive Automation Library) is proprietary software provided **free of charge** by Software Decisions, Inc. By installing, using, copying, distributing, or incorporating GPAL (the "Software"), you agree to be bound by this EULA. If you do not agree, do not use the Software.
+
+## **The GPAL Integrity Standard**
+Unlike many closed-source libraries, GPAL is built on a "Generally Positive" philosophy. This means:
+*   **No Backdoors:** We do not include hidden access or "phone-home" features.
+*   **Total Privacy:** We do not track your usage, collect telemetry, or spy on your data.
+*   **Open Future:** We promise that your workflows will never be left in the dark.
+
+## **Credits & Acknowledgments**
+GPAL was conceived, architected, and primarily implemented by **Michael B. Vederman**, CEO of Software Decisions, Inc. 
+
+Related products developed under Software Decisions, Inc.:
+- **OttoMatic** GPAL browser recorder: Developed by Michael B. Vederman.
+- **OttoMatic Desktop** GPAL application recorder: Developed by Michael B. Vederman.
+- **OttoMagic** GPAL browser REST API executor: Developed by Scott Ramirtha.
+- **GPALRestAPI**: Developed by Michael B. Vederman.
+- **GPAL Studio**: Developed by Bryan Alvarez Pandozi.
+
+## **Continuity Guarantee (The "Legacy Clause")**
+In the event that Software Decisions, Inc. permanently ceases development and support of GPAL without a designated successor, SDi commits to releasing the then-current version of the GPAL source code to the public under a permissive open-source license (such as MIT or Apache 2.0) to ensure the longevity of your projects.
+
+## **No Warranties - "As-Is" Disclaimer**
+THE SOFTWARE IS PROVIDED **"AS IS"**, WITHOUT WARRANTY OF ANY KIND. IN NO EVENT SHALL SOFTWARE DECISIONS, INC. OR ITS CONTRIBUTORS BE LIABLE FOR ANY DAMAGES (DIRECT, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL) ARISING FROM THE USE OF THIS SOFTWARE. YOU USE THE SOFTWARE **AT YOUR OWN RISK**.
+
+## **Trademarks**
+"GPAL", "OttoMatic", "OttoMatic Desktop", "OttoMagic", "GPALRestAPI", "GPAL Studio", and related logos are trademarks of Software Decisions, Inc. Use of these names is permitted only to describe the incorporation of the library (e.g., "Powered by GPAL").
+
+## **Governing Law**
+This agreement is governed by the laws of the **State of Texas, United States**, without regard to conflict of laws. Any disputes shall be resolved in the courts located in Texas.
+
+---
+
 ### Business Source License 1.1
 
 License text copyright © 2024 MariaDB plc, All Rights Reserved. “Business Source License” is a trademark of MariaDB plc.
@@ -5,7 +43,6 @@ License text copyright © 2024 MariaDB plc, All Rights Reserved. “Business Sou
 Licensor: Software Decisions, Inc.
 
 Licensed Work: GPAL - Generally Positive Automation Library
-
 Copyright © 2026 Software Decisions, Inc. All rights reserved.
 
 ### Terms
@@ -48,3 +85,8 @@ GNU General Public License v3.0 or later (https://www.gnu.org/licenses/gpl-3.0.h
 The Business Source License (this document, or the “License”) is not an Open Source license. However, the Licensed Work will eventually be made available under an Open Source License, as stated in this License.
 
 For more information on the use of the Business Source License generally, please visit the [Adopting and Developing Business Source License FAQ](https://mariadb.com/bsl-faq-adopting/).
+
+---
+
+**By proceeding with installation or use, you accept these terms.**  
+Questions or Permissions: [GPAL][@][sditx.com]
