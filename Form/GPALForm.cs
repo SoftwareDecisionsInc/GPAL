@@ -1490,7 +1490,7 @@ namespace GenerallyPositive.GPALForm
             }
 
 
-            textBox.TextChanged += (s, e) => gPALFileSelector._selectedPath = textBox.Text;
+            textBox.TextChanged += (s, e) => gPALFileSelector._selectedPath = textBox.RealText;
 
             dotButton.Click += (s, e) =>
             {
@@ -1565,7 +1565,7 @@ namespace GenerallyPositive.GPALForm
 
             input.Text = gPALInput.Text;   // somehow text is getting truncated to one char from above
 
-            input.TextChanged += new EventHandler(delegate (Object sender, EventArgs a) { gPALInput.Text = ((TextBox)sender).Text; }); // copy changed text up to control
+            input.TextChanged += new EventHandler(delegate (Object sender, EventArgs a) { gPALInput.Text = ((PlaceholderTextBox)sender).RealText; }); // copy changed text up to control, never the placeholder
 
             foreach (var (evt, handler) in gPALInput.Callbacks)
             {
@@ -1774,8 +1774,9 @@ namespace GenerallyPositive.GPALForm
         {
             FormSettings.myForm.ControlList.Add(gPALListView);
 
-            ListView listView = new ListView
+            GPALListViewControl listView = new GPALListViewControl
             {
+                HeaderCheckBox = gPALListView.TickAll,
                 Name = gPALListView.Name,
                 View = gPALListView.ViewMode,
                 FullRowSelect = gPALListView.FullRowSelect,
@@ -1804,6 +1805,20 @@ namespace GenerallyPositive.GPALForm
                 if (true == args.IsSelected && SystemColors.GrayText == args.Item.ForeColor)
                     args.Item.Selected = false;
             };
+
+            // A greyed row cannot be ticked either; a tick it already carries can still be cleared.
+            listView.ItemCheck += (sender, args) =>
+            {
+                if (CheckState.Checked == args.NewValue && SystemColors.GrayText == listView.Items[args.Index].ForeColor)
+                    args.NewValue = args.CurrentValue;
+            };
+
+            // The header box ticks or clears the rows, and follows them when they are ticked one at a time.
+            if (true == gPALListView.TickAll)
+            {
+                listView.HeaderBoxClicked += (sender, args) => gPALListView.TickAllRows(listView);
+                listView.ItemChecked += (sender, args) => gPALListView.SyncHeaderBox();
+            }
 
             foreach (var (evt, handler) in gPALListView.Callbacks)
             {
@@ -2733,7 +2748,7 @@ namespace GenerallyPositive.GPALForm
             ApplyWidth(gPALTextArea.Width, textBox);
             textBox.Text = gPALTextArea.Text;   // somehow text is getting truncated to one char from above
 
-            textBox.TextChanged += new EventHandler(delegate (Object sender, EventArgs a) { gPALTextArea.Text = ((TextBox)sender).Text; }); // copy changed text up to control
+            textBox.TextChanged += new EventHandler(delegate (Object sender, EventArgs a) { gPALTextArea.Text = ((PlaceholderTextBox)sender).RealText; }); // copy changed text up to control, never the placeholder
 
             foreach (var (evt, handler) in gPALTextArea.Callbacks)
             {
@@ -2913,6 +2928,122 @@ namespace GenerallyPositive.GPALForm
                 result = string.Compare(sx, sy, StringComparison.OrdinalIgnoreCase);
 
             return Order == SortOrder.Ascending ? result : -result;
+        }
+    }
+
+    // The list view on a GPAL form. With HeaderCheckBox on, the first column header carries a checkbox. A click on it
+    // is raised as HeaderBoxClicked and kept from the native list view, so GPALListView alone decides which rows it
+    // ticks.
+    internal class GPALListViewControl : ListView
+    {
+        private const int WM_NOTIFY              = 0x004E;
+        private const int LVM_GETHEADER          = 0x101F;
+        private const int HDM_GETITEMW           = 0x120B;
+        private const int HDM_SETITEMW           = 0x120C;
+        private const int HDN_ITEMSTATEICONCLICK = -316;
+        private const int HDI_FORMAT             = 0x0004;
+        private const int HDF_CHECKBOX           = 0x0040;
+        private const int HDF_CHECKED            = 0x0080;
+        private const int HDS_CHECKBOXES         = 0x0400;
+        private const int GWL_STYLE              = -16;
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct NMHDR
+        {
+            public IntPtr  hwndFrom;
+            public UIntPtr idFrom;
+            public int     code;
+        }
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct HDITEM
+        {
+            public int    mask;
+            public int    cxy;
+            public IntPtr pszText;
+            public IntPtr hbm;
+            public int    cchTextMax;
+            public int    fmt;
+            public IntPtr lParam;
+            public int    iImage;
+            public int    iOrder;
+            public uint   type;
+            public IntPtr pvFilter;
+            public uint   state;
+        }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, ref HDITEM lParam);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern int GetWindowLong(IntPtr hWnd, int index);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern int SetWindowLong(IntPtr hWnd, int index, int value);
+
+        private IntPtr header = IntPtr.Zero;
+        private bool headerChecked = false;
+
+        // set before the form is shown
+        internal bool HeaderCheckBox { get; set; } = false;
+
+        internal event EventHandler HeaderBoxClicked;
+
+        // what the header box shows; kept until the header exists
+        internal bool HeaderChecked
+        {
+            get
+            {
+                return headerChecked;
+            }
+            set
+            {
+                headerChecked = value;
+
+                if (IntPtr.Zero != header)
+                    PaintHeaderBox();
+            }
+        }
+
+        // The handle is made again when the view or checkboxes change, so the box is put back each time.
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+
+            header = true == HeaderCheckBox ? SendMessage(Handle, LVM_GETHEADER, IntPtr.Zero, IntPtr.Zero) : IntPtr.Zero;
+
+            if (IntPtr.Zero != header)
+            {
+                SetWindowLong(header, GWL_STYLE, GetWindowLong(header, GWL_STYLE) | HDS_CHECKBOXES);
+                PaintHeaderBox();
+            }
+        }
+
+        // puts the checkbox on the first column header, ticked or clear
+        private void PaintHeaderBox()
+        {
+            HDITEM item = new HDITEM { mask = HDI_FORMAT };
+
+            if (0 < Columns.Count && IntPtr.Zero != SendMessage(header, HDM_GETITEMW, IntPtr.Zero, ref item))
+            {
+                item.fmt = (item.fmt | HDF_CHECKBOX) & ~HDF_CHECKED | (true == headerChecked ? HDF_CHECKED : 0);
+                SendMessage(header, HDM_SETITEMW, IntPtr.Zero, ref item);
+            }
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            NMHDR note = WM_NOTIFY == m.Msg && IntPtr.Zero != header
+                ? (NMHDR)System.Runtime.InteropServices.Marshal.PtrToStructure(m.LParam, typeof(NMHDR))
+                : default(NMHDR);
+
+            if (HDN_ITEMSTATEICONCLICK == note.code && header == note.hwndFrom)
+                HeaderBoxClicked?.Invoke(this, EventArgs.Empty);
+            else
+                base.WndProc(ref m);
         }
     }
 }

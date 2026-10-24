@@ -32,15 +32,9 @@ namespace GenerallyPositive.GPALForm
         private bool isPlaceholder = false;
         private string placeholderText;
 
-        public string PlaceholderText
-        {
-            get { return placeholderText; }
-            set
-            {
-                placeholderText = value;
-                SetPlaceholder();
-            }
-        }
+        // the bullet a password box shows; the box shows the placeholder in plain text and the bullets once there is
+        // text of its own
+        private char passwordChar = '\0';
 
         private bool _suppressPlaceholder = false;
 
@@ -49,60 +43,132 @@ namespace GenerallyPositive.GPALForm
             TextChanged += OnTextChanged;
         }
 
+        public string PlaceholderText
+        {
+            get { return placeholderText; }
+            set
+            {
+                placeholderText = value;
+
+                // a placeholder already on screen is swapped for the new one, or taken away when there is none
+                HidePlaceholder();
+                SetPlaceholder();
+            }
+        }
+
+        /// <summary>
+        /// True while the box shows its placeholder rather than text of its own.
+        /// </summary>
+        public bool ShowingPlaceholder => isPlaceholder;
+
+        /// <summary>
+        /// The box's own text: empty while it shows its placeholder.
+        /// </summary>
+        public string RealText => true == isPlaceholder ? "" : base.Text;
+
+        /// <summary>
+        /// The text on screen, the placeholder included. Emptying a box that shows its placeholder changes nothing:
+        /// GPAL writes every value it copies from the box back into it, and an empty value would otherwise take the
+        /// placeholder down and put it back without end.
+        /// </summary>
+        public override string Text
+        {
+            get { return base.Text; }
+            set
+            {
+                if (false == (isPlaceholder && string.IsNullOrEmpty(value)))
+                    base.Text = value;
+            }
+        }
+
+        /// <summary>
+        /// The character that hides what is typed in a password box. The placeholder shows in plain text.
+        /// </summary>
+        public new char PasswordChar
+        {
+            get { return passwordChar; }
+            set
+            {
+                passwordChar = value;
+                base.PasswordChar = true == isPlaceholder ? '\0' : value;
+            }
+        }
+
+        /// <summary>
+        /// Takes the placeholder off the screen and leaves the box empty, for code about to add text to it.
+        /// </summary>
+        internal void HidePlaceholder()
+        {
+            if (isPlaceholder)
+            {
+                _suppressPlaceholder = true;
+                isPlaceholder = false;
+                this.ForeColor = SystemColors.WindowText;
+                base.PasswordChar = passwordChar;
+                base.Text = "";
+                _suppressPlaceholder = false;
+            }
+        }
+
         protected override void OnGotFocus(EventArgs e)
         {
             base.OnGotFocus(e);
 
-            // Clear on focus only when the text on screen is the placeholder. Trusting the flag let a click wipe real
-            // text.
-            if (isPlaceholder && this.Text == placeholderText)
-            {
-                _suppressPlaceholder = true;
-                isPlaceholder = false;
-                this.ForeColor = System.Drawing.SystemColors.WindowText;
-                this.Text = "";
-                _suppressPlaceholder = false;
-            }
+            HidePlaceholder();
         }
 
         protected override void OnLostFocus(EventArgs e)
         {
             base.OnLostFocus(e);
-            if (!isPlaceholder && string.IsNullOrEmpty(this.Text))
-                SetPlaceholder();
+
+            SetPlaceholder();
         }
 
+        // Shows the placeholder in an empty box that does not have the focus, so text of the box's own is never
+        // replaced and typing never lands after it. The flag is set before the text, so a TextChanged handler reading
+        // ShowingPlaceholder or RealText already sees the placeholder.
         private void SetPlaceholder()
         {
-            // A box with no placeholder must not be flagged as showing one, or the next text looks like placeholder and
-            // the next click wipes it. OnTextChanged returns early without a placeholder, so nothing would clear the
-            // flag.
-            if (!isPlaceholder && !string.IsNullOrEmpty(placeholderText))
+            if (!isPlaceholder && !string.IsNullOrEmpty(placeholderText) && string.IsNullOrEmpty(base.Text) && !this.Focused)
             {
-                this.Text = placeholderText;
-                this.ForeColor = Color.Gray;
+                _suppressPlaceholder = true;
                 isPlaceholder = true;
+                base.PasswordChar = '\0';
+                this.ForeColor = Color.Gray;
+                base.Text = placeholderText;
+                _suppressPlaceholder = false;
+
+                // a TextChanged handler that put text of its own in the box while the placeholder went up keeps it,
+                // and TextChanged is raised again so GPAL's copy of the text and the handlers see it
+                if (placeholderText != base.Text)
+                {
+                    RemovePlaceHolder();
+                    base.OnTextChanged(EventArgs.Empty);
+                }
             }
         }
 
+        // text of the box's own arrived while the placeholder showed
         private void RemovePlaceHolder()
         {
             if (isPlaceholder)
             {
-                this.ForeColor = System.Drawing.SystemColors.WindowText;
+                this.ForeColor = SystemColors.WindowText;
+                base.PasswordChar = passwordChar;
                 isPlaceholder = false;
             }
         }
 
         private void OnTextChanged(object sender, EventArgs e)
         {
-            if (_suppressPlaceholder || string.IsNullOrEmpty(placeholderText))
-                return;
-
-            if (this.Text.Length == 0 && !this.Focused)
-                SetPlaceholder();
-            else
-                RemovePlaceHolder();
+            if (false == _suppressPlaceholder && false == string.IsNullOrEmpty(placeholderText))
+            {
+                // emptied in code while it does not have the focus: the placeholder goes back on screen
+                if (0 == base.Text.Length)
+                    SetPlaceholder();
+                else
+                    RemovePlaceHolder();
+            }
         }
     }
 }

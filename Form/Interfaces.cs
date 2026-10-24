@@ -192,7 +192,7 @@ namespace GenerallyPositive.GPALForm
     {
         [Settings(Description = "The column headers of the list")]
         IAllowListViewControlSettings WithColumns(params string[] headers);
-        [Settings(Description = "Sets the column headers for the list view (used in Details mode)")]
+        [Settings(Description = "Shows a checkbox on every row")]
         IAllowListViewControlSettings WithCheckBoxes(bool enable = true);
         [Settings(Description = "Sets how items are displayed (Details, List, LargeIcon, SmallIcon, or Tile)")]
         IAllowListViewControlSettings WithView(ListViewMode view);
@@ -208,6 +208,8 @@ namespace GenerallyPositive.GPALForm
         IAllowListViewControlSettings WithColumnWeight(double weight);
         [Settings(Description = "Whether clicking a column header sorts the list by it")]
         IAllowListViewControlSettings WithSortable(bool sortable = true);
+        [Settings(Description = "Puts a checkbox on the first column header that ticks or clears every row and follows the rows")]
+        IAllowListViewControlSettings WithTickAll(bool enable = true);
     }
     public interface IAllowStatusStripControlSettings : IAllowControlSettings
     {

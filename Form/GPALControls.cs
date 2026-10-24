@@ -225,6 +225,10 @@ namespace GenerallyPositive.GPALForm
 
                 if (0 == arrived.Count) return;
 
+                // a placeholder on screen comes off first, so the lines are not added after it
+                if (tb is PlaceholderTextBox showing)
+                    showing.HidePlaceholder();
+
                 string[] held = 0 < maxLines ? tb.Lines : new string[0];
 
                 if (0 < maxLines && held.Length + arrived.Count > maxLines)
@@ -546,7 +550,8 @@ namespace GenerallyPositive.GPALForm
         /// <br/><br/>
         /// Handlers attached this way run one at a time, in the order the events arrived. An event that fires
         /// on every keystroke or every click of a spinner therefore gets a handler per event and not a thread
-        /// per event, and a button pressed twice runs its workflow twice in a row rather than twice at once.
+        /// per event. A button is the exception: a click that arrives while its handler is still running or
+        /// waiting to run is dropped, so pressing it twice runs its workflow once.
         /// <br/><br/>
         /// A <see cref="DragEventHandler"/> and a <see cref="KeyEventHandler"/> stay on the UI thread whatever
         /// this is called with, because the event reads args.Effect and args.Handled the moment the handler
@@ -572,7 +577,10 @@ namespace GenerallyPositive.GPALForm
             // another thread they would be set too late.
             bool answersAsItReturns = handler is DragEventHandler || handler is KeyEventHandler;
 
-            Delegate wrapped = true == answersAsItReturns ? null : WrapHandler(handler, QueueInBackground);
+            // a button drops a click that arrives while its handler is still running or waiting to run
+            Action<Action> runner = this is GPALButton ? DropWhileBusy() : (Action<Action>)QueueInBackground;
+
+            Delegate wrapped = true == answersAsItReturns ? null : WrapHandler(handler, runner);
 
             if (null == wrapped)
             {
@@ -586,6 +594,36 @@ namespace GenerallyPositive.GPALForm
             Callbacks.Add((ControlEventType.Default, wrapped));
 
             return this;
+        }
+
+        /// <summary>
+        /// Makes a runner for one background handler that queues an event only while that handler is neither
+        /// running nor waiting, and drops the event otherwise.
+        /// </summary>
+        /// <returns>The runner, holding its own busy flag</returns>
+        private Action<Action> DropWhileBusy()
+        {
+            int[] busy = new int[1];
+
+            Action<Action> retVal = call =>
+            {
+                if (0 != System.Threading.Interlocked.CompareExchange(ref busy[0], 1, 0))
+                    GPAL.PublishSimpleEvent(GPALEventType.DEBUG, $"An event on [{CallbackOwner}] arrived while its handler was running or waiting to run, so it was dropped", this, GPALObjectType.Other);
+                else
+                    QueueInBackground(() =>
+                    {
+                        try
+                        {
+                            call();
+                        }
+                        finally
+                        {
+                            System.Threading.Interlocked.Exchange(ref busy[0], 0);
+                        }
+                    });
+            };
+
+            return retVal;
         }
 
         /// <summary>
@@ -3694,6 +3732,8 @@ namespace GenerallyPositive.GPALForm
         private bool fullRowSelect = true;
         private bool multiSelect = false;
         private bool sortable = false;
+        private bool tickAll = false;
+        private bool tickingAll = false;
 
         internal GPALListView()
         {
@@ -3709,6 +3749,54 @@ namespace GenerallyPositive.GPALForm
         {
             CheckBoxes = enable;
             return this;
+        }
+
+        /// <summary>
+        /// Puts a checkbox on the first column header. Clicking it ticks every row that is not disabled, or clears every
+        /// row, and it shows ticked whenever every row that is not disabled is ticked. Turns on row checkboxes too.
+        /// </summary>
+        /// <param name="enable">True to show the header checkbox.</param>
+        /// <returns>Fluent interface to define more settings.</returns>
+        public IAllowListViewControlSettings WithTickAll(bool enable = true)
+        {
+            tickAll = enable;
+
+            if (true == enable)
+                checkBoxes = true;
+
+            return this;
+        }
+
+        /// <summary>
+        /// Whether the first column header carries a tick-all checkbox, as set via <see cref="WithTickAll(bool)"/>.
+        /// </summary>
+        public bool TickAll => tickAll;
+
+        // Ticks every row that is not disabled, or clears every row, then shows the result on the header box.
+        internal void TickAllRows(GPALListViewControl lv)
+        {
+            bool tick = false == lv.HeaderChecked;
+
+            tickingAll = true;
+
+            foreach (ListViewItem item in lv.Items)
+                item.Checked = true == tick && SystemColors.GrayText != item.ForeColor;
+
+            tickingAll = false;
+
+            SyncHeaderBox();
+        }
+
+        // The header box is ticked when there is a row that is not disabled and every one of them is ticked. Runs on
+        // the UI thread; while the header is ticking every row, it waits for the end.
+        internal void SyncHeaderBox()
+        {
+            if (WindowsControl is GPALListViewControl lv && true == tickAll && false == tickingAll)
+            {
+                List<ListViewItem> open = lv.Items.Cast<ListViewItem>().Where(item => SystemColors.GrayText != item.ForeColor).ToList();
+
+                lv.HeaderChecked = 0 < open.Count && open.All(item => item.Checked);
+            }
         }
 
         /// <summary>
@@ -3852,7 +3940,11 @@ namespace GenerallyPositive.GPALForm
         public void ClearItems()
         {
             if (!(WindowsControl is ListView lv) || false == Alive(lv)) return;
-            OnUi(lv, () => lv.Items.Clear());
+            OnUi(lv, () =>
+            {
+                lv.Items.Clear();
+                SyncHeaderBox();
+            });
         }
 
         /// <summary>
@@ -3907,9 +3999,41 @@ namespace GenerallyPositive.GPALForm
                 lv.Items[index].ForeColor = true == enabled ? SystemColors.WindowText : SystemColors.GrayText;
 
                 if (false == enabled) lv.Items[index].Selected = false;
+
+                SyncHeaderBox();
             };
 
             OnUi(lv, paint);
+        }
+
+        /// <summary>
+        /// Ticks the checkbox on a row. By position, since text can repeat. ControlEventType.ItemChecked reports it
+        /// like a click would.
+        /// </summary>
+        /// <param name="index">The 0-based row to tick.</param>
+        public void CheckItem([Index] int index)
+        {
+            SetItemChecked(index, true);
+        }
+
+        /// <summary>
+        /// Clears the checkbox on a row.
+        /// </summary>
+        /// <param name="index">The 0-based row to clear.</param>
+        public void UncheckItem([Index] int index)
+        {
+            SetItemChecked(index, false);
+        }
+
+        // Sets the box on the UI thread; a row that does not exist is left alone.
+        private void SetItemChecked(int index, bool isChecked)
+        {
+            if (WindowsControl is ListView lv && true == Alive(lv))
+                OnUi(lv, () =>
+                {
+                    if (0 <= index && index < lv.Items.Count)
+                        lv.Items[index].Checked = isChecked;
+                });
         }
 
         public void AddItem(string title, params string[] subItems)
@@ -3923,7 +4047,11 @@ namespace GenerallyPositive.GPALForm
 
             var item = new ListViewItem(title);
             foreach (var s in subItems) item.SubItems.Add(s);
-            OnUi(lv, () => lv.Items.Add(item));
+            OnUi(lv, () =>
+            {
+                lv.Items.Add(item);
+                SyncHeaderBox();
+            });
         }
 
         // what was added before the list existed, in the order it was added
@@ -4828,7 +4956,7 @@ namespace GenerallyPositive.GPALForm
         /// <code>
         ///     static GPALFileSelector chromeProfile = (GPALFileSelector)GPAL.FileSelector
         ///         .WithSelectFolder(true)
-        ///         .WithSelectedPath(@"C:\profiles\chrome\sdi-signedin")
+        ///         .WithSelectedPath(@"C:\profiles\chrome\signedin")
         ///         .WithName("chromeProfile")
         ///         .ToGPALObject();
         /// </code>

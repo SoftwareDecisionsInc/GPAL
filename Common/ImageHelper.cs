@@ -40,6 +40,18 @@ namespace GenerallyPositive
     }
 
     /// <summary>
+    /// Reads the text a QR code holds. The GPAL.Image package provides one and registers it with
+    /// <see cref="GPAL.RegisterQRCodeReader"/>; GPAL itself has none, so it carries no image library.
+    /// </summary>
+    public interface IQRCodeReader
+    {
+        /// <summary>Reads the QR code on <paramref name="image"/>.</summary>
+        /// <param name="image">A picture with a QR code anywhere on it, such as a screenshot</param>
+        /// <returns>The text the QR code holds, or an empty string when there is none</returns>
+        string ReadQRCode(Bitmap image);
+    }
+
+    /// <summary>
     /// Provides comprehensive image capture, conversion, and matching capabilities for automation scenarios.
     /// Supports both desktop (headful) and browser (headless/headful) screenshot workflows with fluent chaining.
     /// </summary>

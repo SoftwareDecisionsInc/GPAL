@@ -419,6 +419,12 @@ namespace GenerallyPositive
     {
         [Settings(Description = "The login for the credential service itself, built once and handed to every request that queries it")]
         IAllowCredentialSettings WithMasterCredentials(ICredentials masterCredentials);
+        [Settings(Description = "The secret a site gives out when two-factor sign-in is turned on: the base32 key, or the otpauth:// URI in the setup QR code")]
+        IAllowCredentialSettings WithOtpSecret([Password] string otpSecret);
+        [Settings(Description = "Reads the one-time password secret from a picture of a site's setup QR code or a Google Authenticator export (needs GPAL.Image)")]
+        IAllowCredentialSettings WithOtpQRCode(GPALFile qrCodeImage);
+        [Settings(Description = "Reads the one-time password secret from a QR code the browser is showing (needs GPAL.Image)")]
+        IAllowCredentialSettings WithOtpQRCode(GenerallyPositive.Browser.IBrowser browser);
     }
 
     public interface IAllowCredentialServiceType
@@ -498,6 +504,8 @@ namespace GenerallyPositive
         IAllowCredentialSettings WithDomain(string domain);
         [Action(Description = "Looks up the credential matching.GetCredentialsFor's target (filtered by.WithDomain if set) and appends a [Username, Password] row to the given grid")]
         IAllowGetCredentials SaveTo(IGPALGrid<string> grid);
+        [Action(Description = "Appends an [Issuer, Account, otpauth URI] row to the grid for each account the one-time password secret holds")]
+        IAllowGetCredentials SaveOtpSecretsTo(IGPALGrid<string> grid);
         [Settings(Description = "Supplies a previously-obtained OAuth authorization code, skipping the interactive authorization step")]
         IAllowCredentialSettings WithAuthCode(string authCode);
         [Settings(Description = "Supplies a previously-obtained OAuth refresh token, used to fetch a new access token without re-authorizing")]
@@ -511,6 +519,8 @@ namespace GenerallyPositive
         // No methods, placeholder for Into completion
         [Action(Description = "Fetches a new access token for ServiceType using the credentials/configuration supplied so far, and stores it in AccessToken/IssueTime/ExpiresIn")]
         void FetchAccessToken(out string accessToken);
+        [Action(Description = "Makes the one-time code an authenticator app would show right now for the secret set with WithOtpSecret")]
+        void GetOtpCode(out string code);
     }
 
     public interface ICredentials : IAllowCredentialServiceType, IAllowCredentialMethod, IAllowClientSecret, IAllowUsernameOrKey, IAllowCredentialsPassword, IAllowOAuthClient, IAllowCredentialSettings, IAllowGetCredentials, IAllowKeyFromApiEndpoint
@@ -745,7 +755,7 @@ namespace GenerallyPositive
     {
         [Settings(Description = "Add a filename to the GPALFile list. Actual output filenames added to end.")]
         IAllowFileSettings WithFileName([FilePath] string filename);   // a wildcard pattern expands to the matching files; an http/https url is fetched to a local file and used from there
-        [Settings(Description = "A browser already holding the session a url needs. Set before .WithFileName. GPAL tries its own connection first and falls back to this browser, downloading in a new tab.")]
+        [Settings(Description = "A browser already holding the session a url needs. Set before .WithFileName. The file is fetched inside the page, or downloaded in a new tab if the page cannot return it.")]
         IAllowFileSettings WithBrowser(Browser.IBrowser browser);
     }
     #endregion <File Interfaces>

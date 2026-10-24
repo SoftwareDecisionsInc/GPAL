@@ -2,6 +2,34 @@
 
 Every release of GPAL and GPAL.Image, newest first. The two are released together at the same version.
 
+## 1.0.2
+
+### GPAL
+
+#### Changed
+
+- OttoMagic uploads recognize more file types
+- Greyed list view rows cannot be ticked
+- A button attached with WithCallbackOffUIThread ignores clicks while its handler is running
+
+#### Added
+
+- One-time passwords on GPAL.Credentials: WithOtpSecret, WithOtpQRCode, GetOtpCode and SaveOtpSecretsTo
+- GPAL.RegisterQRCodeReader
+- List views: WithTickAll, CheckItem and UncheckItem
+
+#### Fixed
+
+- Programs built from the package on .NET Framework get System.ValueTuple.dll
+- Placeholders show in inputs, text areas and file selectors, and never become the value
+- Password inputs show their placeholder as text
+
+### GPAL.Image
+
+#### Added
+
+- Reads the QR codes WithOtpQRCode takes, phone photos of a screen included
+
 ## 1.0.1
 
 ### GPAL

@@ -9,18 +9,18 @@ per that license's own attribution requirements.
 Summary
 -------
 
-| Package                                              | Version           | License      | Copyright                                             |
-|------------------------------------------------------|-------------------|--------------|--------------------------------------------------------|
-| BouncyCastle.Cryptography                            | 2.6.2             | MIT          | Legion of the Bouncy Castle Inc. 2000-2025              |
-| ClosedXML                                            | 0.105.0           | MIT          | Jan Havlicek, Francois Botha, Aleksei Pankratev, Manuel de Leon, Amir Ghezelbash |
-| HtmlAgilityPack                                      | 1.12.4            | MIT          | ZZZ Projects Inc.                                       |
-| MailKit                                              | 4.17.0            | MIT          | .NET Foundation and Contributors (Jeffrey Stedfast)     |
+| Package                                              | Version           | License      | Copyright                                               |
+|------------------------------------------------------|-------------------|--------------|---------------------------------------------------------|
+| BouncyCastle.Cryptography                            | 2.7.0             | MIT          | Legion of the Bouncy Castle Inc. 2000-2026              |
+| ClosedXML                                            | 0.105.1           | MIT          | Jan Havlicek, Francois Botha, Aleksei Pankratev, Manuel de Leon, Amir Ghezelbash |
+| HtmlAgilityPack                                      | 1.13.0            | MIT          | ZZZ Projects Inc.                                       |
+| MailKit                                              | 4.18.1            | MIT          | .NET Foundation and Contributors (Jeffrey Stedfast)     |
 | Microsoft.NETCore.Portable.Compatibility             | 1.0.1             | MIT          | Microsoft Corporation                                   |
-| Microsoft.OpenApi.Readers                            | 1.6.29            | MIT          | Microsoft Corporation                                   |
-| MimeKit                                              | 4.17.0            | MIT          | .NET Foundation and Contributors (Jeffrey Stedfast)     |
-| Nager.PublicSuffix                                   | 2.4.0             | MIT          | Tino Hager                                              |
+| Microsoft.OpenApi.Readers                            | 1.6.31            | MIT          | Microsoft Corporation                                   |
+| MimeKit                                              | 4.18.1            | MIT          | .NET Foundation and Contributors (Jeffrey Stedfast)     |
+| Nager.PublicSuffix                                   | 3.8.0             | MIT          | Tino Hager                                              |
 | Newtonsoft.Json                                      | 13.0.4            | MIT          | James Newton-King 2008                                  |
-| ReverseMarkdown                                      | 6.0.0             | MIT          | Babu Annamalai                                          |
+| ReverseMarkdown                                      | 6.2.1             | MIT          | Babu Annamalai                                          |
 | System.Collections.NonGeneric                        | 4.3.0             | MIT          | Microsoft Corporation                                   |
 | System.Drawing.Primitives                            | 4.3.0             | MIT          | Microsoft Corporation                                   |
 | System.IO                                            | 4.3.0             | MIT          | Microsoft Corporation                                   |
@@ -28,13 +28,14 @@ Summary
 | System.Net.Http                                      | 4.3.4             | MIT          | Microsoft Corporation                                   |
 | System.Runtime                                       | 4.3.1             | MIT          | Microsoft Corporation                                   |
 | System.Runtime.InteropServices.RuntimeInformation    | 4.3.0             | MIT          | Microsoft Corporation                                   |
-| System.Text.Json                                     | 10.0.9            | MIT          | Microsoft Corporation                                   |
+| System.Text.Json                                     | 10.0.12           | MIT          | Microsoft Corporation                                   |
+| System.ValueTuple                                    | 4.6.2             | MIT          | Microsoft Corporation                                   |
 | YamlDotNet                                           | 18.1.0            | MIT          | Antoine Aubry and contributors                          |
 | OpenCvSharp4                                         | 4.13.0.20260627   | Apache-2.0   | shimat, 2008-2026                                       |
 | OpenCvSharp4.Extensions                              | 4.13.0.20260627   | Apache-2.0   | shimat, 2008-2026                                       |
 | OpenCvSharp4.runtime.win                             | 4.13.0.20260627   | Apache-2.0   | shimat, 2008-2026                                       |
-| Selenium.Support                                     | 4.26.0            | Apache-2.0   | Software Freedom Conservancy, 2024                      |
-| Selenium.WebDriver                                   | 4.26.0            | Apache-2.0   | Software Freedom Conservancy, 2024                      |
+| Selenium.Support                                     | 4.51.0            | Apache-2.0   | Software Freedom Conservancy, 2024                      |
+| Selenium.WebDriver                                   | 4.51.0            | Apache-2.0   | Software Freedom Conservancy, 2024                      |
 
 No GPL, LGPL, or AGPL licensed packages were found among GPAL's direct
 NuGet dependencies as of this review.
@@ -48,8 +49,8 @@ ClosedXML, HtmlAgilityPack, MailKit, Microsoft.NETCore.Portable.Compatibility,
 Microsoft.OpenApi.Readers, MimeKit, Nager.PublicSuffix, Newtonsoft.Json,
 ReverseMarkdown, System.Collections.NonGeneric, System.Drawing.Primitives,
 System.IO, System.IO.Compression.ZipFile, System.Net.Http, System.Runtime,
-System.Runtime.InteropServices.RuntimeInformation, System.Text.Json, and
-YamlDotNet.
+System.Runtime.InteropServices.RuntimeInformation, System.Text.Json,
+System.ValueTuple, and YamlDotNet.
 
     The MIT License (MIT)
 

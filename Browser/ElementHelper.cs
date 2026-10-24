@@ -44,6 +44,7 @@ using static GenerallyPositive.Browser.Puppeteer;
 using static GenerallyPositive.Enums;
 using static GenerallyPositive.SelectorSettings;
 using Keys = OpenQA.Selenium.Keys;
+using MatchType = GenerallyPositive.Enums.MatchType;
 
 namespace GenerallyPositive.Browser
 {

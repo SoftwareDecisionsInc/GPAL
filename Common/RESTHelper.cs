@@ -478,7 +478,7 @@ namespace GenerallyPositive
 
                         byte[] fileBytes = File.ReadAllBytes(uploadPath);
                         string base64Data = Convert.ToBase64String(fileBytes);
-                        string mimeType = MimeMapping.GetMimeMapping(uploadPath);
+                        string mimeType = MimeKit.MimeTypes.GetMimeType(uploadPath);
 
                         var payload = new
                         {

@@ -1,263 +1,112 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <TargetFramework>net48</TargetFramework>
     <ProjectGuid>{BBAD2AB5-F425-4CED-A3B0-34969FC1FEC1}</ProjectGuid>
     <OutputType>Library</OutputType>
-    <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>GenerallyPositive</RootNamespace>
     <AssemblyName>GPAL</AssemblyName>
-    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
-    <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
-    <TargetFrameworkProfile />
-    <NuGetPackageImportStamp>
-    </NuGetPackageImportStamp>
-    <_MigrateToProjectGuid>9f2e9a58-6f6d-4725-8c3e-e93c579e0c4e</_MigrateToProjectGuid>
+    <SignAssembly>true</SignAssembly>
+    <Platforms>AnyCPU;x64</Platforms>
+    <!-- AssemblyInfo.cs holds the version and the rest; the SDK must not write them a second time -->
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <!-- bin\Debug and bin\Release as before, without a net48 folder under them -->
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
     <OutputPath>bin\Debug\</OutputPath>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <PlatformTarget>AnyCPU</PlatformTarget>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|AnyCPU'">
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
     <OutputPath>bin\Release\</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
+
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
     <DebugSymbols>true</DebugSymbols>
     <OutputPath>bin\x64\Debug\</OutputPath>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <DebugType>full</DebugType>
     <PlatformTarget>AnyCPU</PlatformTarget>
-    <ErrorReport>prompt</ErrorReport>
   </PropertyGroup>
+
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
     <OutputPath>bin\x64\Release\</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
     <Optimize>true</Optimize>
     <DebugType>pdbonly</DebugType>
     <PlatformTarget>x64</PlatformTarget>
-    <ErrorReport>prompt</ErrorReport>
   </PropertyGroup>
-  <PropertyGroup>
-    <SignAssembly>true</SignAssembly>
-  </PropertyGroup>
-  <PropertyGroup>
-    <RunPostBuildEvent>OnOutputUpdated</RunPostBuildEvent>
-  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Update="Form\GPALFormForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="Form\PlaceholderTextbox.cs">
+      <SubType>Component</SubType>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Browser\gcode.js" />
+    <EmbeddedResource Include="Form\gpal-head.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Common\WindowHelper.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <Reference Include="Accessibility" />
     <Reference Include="Microsoft.VisualBasic" />
     <Reference Include="PresentationCore" />
     <Reference Include="PresentationFramework" />
-    <Reference Include="System" />
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.ComponentModel.Composition" />
-    <Reference Include="System.Data" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.Management" />
     <Reference Include="System.Web" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Windows.Forms.DataVisualization" />
-    <Reference Include="System.Xml" />
-    <Reference Include="System.Xml.Linq" />
     <Reference Include="UIAutomationClient" />
     <Reference Include="UIAutomationTypes" />
     <Reference Include="WindowsBase" />
   </ItemGroup>
+
   <ItemGroup>
-    <Compile Include="Application\Application.cs" />
-    <Compile Include="Application\ApplicationHelper.cs" />
-    <Compile Include="Application\ApplicationSettings.cs" />
-    <Compile Include="Application\AutomationElementExtension.cs" />
-    <Compile Include="Application\ElementAssistant.cs" />
-    <Compile Include="Application\ElementHelper.cs" />
-    <Compile Include="Application\ElementSettings.cs" />
-    <Compile Include="Application\FileDialogHelper.cs" />
-    <Compile Include="Application\GPALAutomationElement.cs" />
-    <Compile Include="Application\IGPALAutomationElement.cs" />
-    <Compile Include="Application\managedAutomationElementExtension.cs" />
-    <Compile Include="Application\MsaaHelper.cs" />
-    <Compile Include="Browser\CDPResultsExtractor.cs" />
-    <Compile Include="Browser\ChromeProfileManager.cs" />
-    <Compile Include="Browser\ChromePatcher.cs" />
-    <Compile Include="Browser\EdgePatcher.cs" />
-    <Compile Include="Browser\DriverHelper.cs" />
-    <Compile Include="Browser\FirefoxProfileManager.cs" />
-    <Compile Include="Browser\GPALUrl.cs" />
-    <Compile Include="Browser\DesktopGuard.cs" />
-    <Compile Include="Browser\HiddenDesktop.cs" />
-    <Compile Include="Browser\NextJsHydrationExtractor.cs" />
-    <Compile Include="Browser\PupeteerClient.cs" />
-    <Compile Include="Browser\PuppeteerCommunicator.cs" />
-    <Compile Include="Browser\SeleniumStorageHelper.cs" />
-    <Compile Include="Browser\SitemapExtractor.cs" />
-    <Compile Include="Browser\UrlHelper.cs" />
-    <Compile Include="Browser\YouTube.cs" />
-    <Compile Include="Common\AIProvider.cs" />
-    <Compile Include="Common\AIProvidersConfig.cs" />
-    <Compile Include="Common\Base64Helper.cs" />
-    <Compile Include="Common\Credentials.cs" />
-    <Compile Include="Common\Cryptography.cs" />
-    <Compile Include="Common\DigestRules.cs" />
-    <Compile Include="Common\ExplicitNullYamlEventEmitter.cs" />
-    <Compile Include="Common\GPALClipboard.cs" />
-    <Compile Include="Common\HumanReadableAliasEventEmitter.cs" />
-    <Compile Include="Common\Gherkin.cs" />
-    <Compile Include="Common\GoogleCloud.cs" />
-    <Compile Include="Common\GoogleDrive.cs" />
-    <Compile Include="Common\GoogleSheets.cs" />
-    <Compile Include="Browser\MagicHelper.cs" />
-    <Compile Include="Browser\Puppeteer.cs" />
-    <Compile Include="Browser\WorkflowManager.cs" />
-    <Compile Include="Browser\WorkflowScheduler.cs" />
-    <Compile Include="Common\ActivatorHelper.cs" />
-    <Compile Include="Common\CsvValueYamlConverter.cs" />
-    <Compile Include="Common\GPALAI.cs" />
-    <Compile Include="Common\GPALElementConverter.cs" />
-    <Compile Include="Common\GPALExcel.cs" />
-    <Compile Include="Common\HtmlDigestConverter.cs" />
-    <Compile Include="Common\JSONSerializers.cs" />
-    <Compile Include="Common\Launcher.cs" />
-    <Compile Include="Common\OCRInterfaces.cs" />
-    <Compile Include="Common\RESTHelper.cs" />
-    <Compile Include="Common\Attributes.cs" />
-    <Compile Include="Common\ComplexYamlConverter.cs" />
-    <Compile Include="Common\ExcelHelper.cs" />
-    <Compile Include="Common\GPALConverter.cs" />
-    <Compile Include="Common\ConverterHelper.cs" />
-    <Compile Include="Common\ConverterSettings.cs" />
-    <Compile Include="Common\GPALGrid.cs" />
-    <Compile Include="Common\GPALLogger.cs" />
-    <Compile Include="Common\GPALMail.cs" />
-    <Compile Include="Common\GPALMailSettings.cs" />
-    <Compile Include="Common\IPAddressYamlConverter.cs" />
-    <Compile Include="Common\CustomJsonConverter.cs" />
-    <Compile Include="Common\NullableBigIntegerYamlConverter.cs" />
-    <Compile Include="Common\NullableGuidYamlConverter.cs" />
-    <Compile Include="Common\NullableTimeSpanYamlConverter.cs" />
-    <Compile Include="Common\VersionYamlConverter.cs" />
-    <Compile Include="Common\DateTimeOffsetYamlConverter.cs" />
-    <Compile Include="Common\ObjectCopier.cs" />
-    <Compile Include="Common\RESTClient.cs" />
-    <Compile Include="Common\ResultCollection.cs" />
-    <Compile Include="Common\SelectorSet.cs" />
-    <Compile Include="Common\UriYamlConverter.cs" />
-    <Compile Include="Common\VkCodeToDomKeyConverter.cs" />
-    <Compile Include="Common\WaitTimeYamlConverter.cs" />
-    <Compile Include="Form\GPALControls.cs" />
-    <Compile Include="Form\GPALFormForm.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="Form\Interfaces.cs" />
-    <Compile Include="Form\PlaceholderTextbox.cs">
-      <SubType>Component</SubType>
-    </Compile>
-    <Compile Include="Common\HardwareHelper.cs" />
-    <Compile Include="Application\Interfaces.cs" />
-    <Compile Include="Browser\Browser.cs" />
-    <Compile Include="Browser\BrowserHelper.cs" />
-    <Compile Include="Browser\BrowserSettings.cs" />
-    <Compile Include="Common\Interfaces.cs" />
-    <Compile Include="Common\GPALDatabase.cs" />
-    <Compile Include="Common\DatabaseHelper.cs" />
-    <Compile Include="Common\DatabaseSettings.cs" />
-    <Compile Include="Browser\ElementAssistant.cs" />
-    <Compile Include="Browser\ElementHelper.cs" />
-    <Compile Include="Browser\ElementSettings.cs" />
-    <Compile Include="Common\Enums.cs" />
-    <Compile Include="Common\GPALFile.cs" />
-    <Compile Include="Common\FileHelper.cs" />
-    <Compile Include="Common\GPALFileSettings.cs" />
-    <Compile Include="Form\GPALForm.cs" />
-    <Compile Include="Form\FormHelper.cs" />
-    <Compile Include="Form\FormSettings.cs" />
-    <Compile Include="Common\GPAL.cs" />
-    <Compile Include="Common\GPALSettings.cs" />
-    <Compile Include="Common\GPALElement.cs" />
-    <Compile Include="Common\GPALException.cs" />
-    <Compile Include="Common\GPALRequest.cs" />
-    <Compile Include="Common\GridHelper.cs" />
-    <Compile Include="Common\ImageHelper.cs" />
-    <Compile Include="Browser\Interfaces.cs" />
-    <Compile Include="Common\KnownFolders.cs" />
-    <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Common\Selector.cs" />
-    <Compile Include="Common\SelectorSettings.cs" />
-    <Compile Include="Common\UnitOfWork.cs" />
-    <Compile Include="Common\QuotedStringYamlConverter.cs" />
-    <None Include="Common\WindowHelper.cs" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="BouncyCastle.Cryptography">
-      <Version>2.7.0</Version>
-    </PackageReference>
-    <PackageReference Include="ClosedXML">
-      <Version>0.105.1</Version>
-    </PackageReference>
-    <PackageReference Include="HtmlAgilityPack">
-      <Version>1.13.0</Version>
-    </PackageReference>
-    <PackageReference Include="MailKit">
-      <Version>4.18.1</Version>
-    </PackageReference>
-    <PackageReference Include="Microsoft.OpenApi.Readers">
-      <Version>1.6.31</Version>
-    </PackageReference>
-    <PackageReference Include="MimeKit">
-      <Version>4.18.1</Version>
-    </PackageReference>
-    <PackageReference Include="Nager.PublicSuffix">
-      <Version>3.8.0</Version>
-    </PackageReference>
-    <PackageReference Include="Newtonsoft.Json">
-      <Version>13.0.4</Version>
-    </PackageReference>
-    <PackageReference Include="ReverseMarkdown">
-      <Version>6.2.1</Version>
-    </PackageReference>
-    <PackageReference Include="Selenium.Support">
-      <Version>4.51.0</Version>
-    </PackageReference>
-    <PackageReference Include="Selenium.WebDriver">
-      <Version>4.51.0</Version>
-    </PackageReference>
-    <PackageReference Include="System.IO.Compression.ZipFile">
-      <Version>4.3.0</Version>
-    </PackageReference>
-    <PackageReference Include="System.Text.Json">
-      <Version>10.0.12</Version>
-    </PackageReference>
+    <PackageReference Include="BouncyCastle.Cryptography" Version="2.7.0" />
+    <PackageReference Include="ClosedXML" Version="0.105.1" />
+    <PackageReference Include="HtmlAgilityPack" Version="1.13.0" />
+    <PackageReference Include="MailKit" Version="4.18.1" />
+    <PackageReference Include="Microsoft.OpenApi.Readers" Version="1.6.31" />
+    <PackageReference Include="MimeKit" Version="4.18.1" />
+    <PackageReference Include="Nager.PublicSuffix" Version="3.8.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="ReverseMarkdown" Version="6.2.1" />
+    <PackageReference Include="Selenium.Support" Version="4.51.0" />
+    <PackageReference Include="Selenium.WebDriver" Version="4.51.0" />
+    <PackageReference Include="System.IO.Compression.ZipFile" Version="4.3.0" />
+    <PackageReference Include="System.Text.Json" Version="10.0.12" />
     <!-- ValueTuple is in-box on net48 (mscorlib), so this package suppresses copy-local,
          but System.Text.Json pulls it transitively and the auto-generated binding redirect
          demands assembly 4.0.5.0, which nothing on disk provides (in-box facade is 4.0.0.0).
          GeneratePathProperty exposes $(PkgSystem_ValueTuple) so the AddValueTupleCopyLocal
          target below can land the 4.0.5.0 DLL in the output folder and satisfy the redirect. -->
-    <PackageReference Include="System.ValueTuple" GeneratePathProperty="true">
-      <Version>4.6.2</Version>
-    </PackageReference>
-    <PackageReference Include="YamlDotNet">
-      <Version>18.1.0</Version>
-    </PackageReference>
+    <PackageReference Include="System.ValueTuple" GeneratePathProperty="true" Version="4.6.2" />
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Browser\gcode.js" />
-    <EmbeddedResource Include="Form\gpal-head.ico" />
-  </ItemGroup>
-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+
   <!-- Force the System.ValueTuple 4.0.5.0 DLL into the copy-local set. RAR treats it as an
        in-box facade and refuses to copy it, but System.Text.Json pulls it transitively and the
        auto-generated binding redirect hard-demands assembly 4.0.5.0 (the in-box facade is only
@@ -268,8 +117,13 @@
       <ReferenceCopyLocalPaths Include="$(PkgSystem_ValueTuple)\lib\net462\System.ValueTuple.dll" />
     </ItemGroup>
   </Target>
-  <PropertyGroup>
-    <PostBuildEvent>
-    </PostBuildEvent>
-  </PropertyGroup>
+
+  <!-- programs that reference GPAL do not copy the DLL above out of GPAL's bin on their own;
+       as a copied item it lands beside every one of them, as it did before. It is added in a target,
+       after references resolve, because a DLL listed as a project item would become what GPAL compiles against -->
+  <Target Name="CopyValueTupleToPrograms" BeforeTargets="AssignTargetPaths">
+    <ItemGroup>
+      <None Include="$(PkgSystem_ValueTuple)\lib\net462\System.ValueTuple.dll" Link="System.ValueTuple.dll" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
 </Project>

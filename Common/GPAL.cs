@@ -504,6 +504,12 @@ namespace GenerallyPositive
         [Action(Description = "Register the image matcher from the GPAL.Image package, which image selectors need")]
         public static void RegisterImageMatcher(IImageMatcher imageMatcher) => ImageMatcher = imageMatcher;
 
+        // QR code reader from the GPAL.Image package. Without it, WithOtpQRCode reads nothing and publishes why.
+        internal static IQRCodeReader QRCodeReader { get; private set; }
+
+        [Action(Description = "Register the QR code reader from the GPAL.Image package, which WithOtpQRCode needs")]
+        public static void RegisterQRCodeReader(IQRCodeReader qrCodeReader) => QRCodeReader = qrCodeReader;
+
         internal static ImageHelper imageHelper;
         public static IImageHelper ImageHelper
         {

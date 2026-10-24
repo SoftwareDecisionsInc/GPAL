@@ -64,7 +64,8 @@ namespace GenerallyPositive.GPALForm
         /// <returns>The text to set on the control</returns>
         private static string TextFor(Control control, string useText, WriteMode writeMode)
         {
-            string current = control.Text ?? string.Empty;
+            // a box showing its placeholder holds no text of its own
+            string current = (control is PlaceholderTextBox placeholderBox ? placeholderBox.RealText : control.Text) ?? string.Empty;
             string retVal = useText;
 
             if (WriteMode.Append == writeMode)
