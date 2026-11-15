@@ -20,7 +20,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Net;
+using System.Net.Http;
 using System.Net.WebSockets;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -37,7 +37,6 @@ namespace GenerallyPositive.Browser
     public class Puppeteer
     {
         internal string webSocketUrl { get; set; } = null;
-        internal static Dictionary<DevToolsMethods, Func<Newtonsoft.Json.Linq.JObject, object>> resultExtractors { get; set; }
 
         public static Process LaunchBrowser(IBrowser browser, GPALUrl URL)
         {
@@ -61,8 +60,7 @@ namespace GenerallyPositive.Browser
                 string targetUrl = target.url?.ToString();
                 if (targetType == "page" && targetUrl != null)
                 {
-                    // Return the first page target as a reasonable guess for the active tab
-                    // You can add additional filters (e.g., URL or browserContextId) if needed
+                    // The first page target is taken as the active tab
                     return target.targetId?.ToString();
                 }
             }
@@ -99,12 +97,10 @@ namespace GenerallyPositive.Browser
                     // 127.0.0.1 here only: localhost tries IPv6 first and waits out the refusal, which slows this
                     // startup retry loop. Elsewhere use localhost; extension permissions and origin checks treat
                     // 127.0.0.1 as a different origin.
-                    HttpWebRequest request = (HttpWebRequest)WebRequest.Create($"{puppeteerUrl.Replace("localhost", "127.0.0.1")}/json/version");
-                    request.Method = "GET";
-                    request.Timeout = 2_000;
-                    HttpWebResponse response = (HttpWebResponse)request.GetResponse();
-                    using StreamReader reader = new StreamReader(response.GetResponseStream());
-                    string json = reader.ReadToEnd();
+                    string json;
+                    using (HttpClient client = new HttpClient { Timeout = TimeSpan.FromMilliseconds(2_000) })
+                        json = client.GetStringAsync($"{puppeteerUrl.Replace("localhost", "127.0.0.1")}/json/version").ConfigureAwait(false).GetAwaiter().GetResult();
+
                     var versionInfo = JsonSerializer.Deserialize<Dictionary<string, string>>(json);
                     retVal = versionInfo["webSocketDebuggerUrl"]; // e.g., ws://localhost:<port>/devtools/browser/<id>
                 }

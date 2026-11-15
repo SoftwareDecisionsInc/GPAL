@@ -1,14 +1,11 @@
-﻿// written by grok
-// inspired by the Web Scraping Club article + React Flight discussions
-
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using GenerallyPositive.Browser;
-using System.Text.Json;   // for Browser instance if needed
+using System.Text.Json;
 using Newtonsoft.Json.Linq;
 
 namespace GenerallyPositive
@@ -18,7 +15,7 @@ namespace GenerallyPositive
         public bool Success { get; set; }
         public string RawNextDataJson { get; set; } = string.Empty;     // from __NEXT_DATA__ if present
         public List<string> FlightChunks { get; set; } = new List<string>();         // raw self.__next_f.push(...) contents
-        public string ParsedStructuredData { get; set; } = string.Empty; // future: cleaned/parsed version
+        public string ParsedStructuredData { get; set; } = string.Empty; // __NEXT_DATA__, or the Flight chunks decoded
         public string Url { get; set; } = string.Empty;
         public string Title { get; set; } = "Untitled";
         public int HydrationPayloadLength { get; set; }   // characters of hydration script content, not of the page

@@ -864,7 +864,7 @@ namespace GenerallyPositive
             GPALMailSettings.BccEmailAddresses.Clear();
             GPALMailSettings.Subject = null;
             GPALMailSettings.BodyText = null;
-            GPALMailSettings.BodyHTML = null;   // Send prefers this one, so leaving it made every later message re-send the last html body
+            GPALMailSettings.BodyHTML = null;   // Send prefers this one, so a stale html body would go out with every later message
             GPALMailSettings.Attachments.Clear();
             GPALMailSettings.ReceivedEmails.Clear();
             return this;
@@ -943,8 +943,7 @@ namespace GenerallyPositive
         /// <returns>True if <paramref name="text"/> appears to be HTML; otherwise false.</returns>
         static bool IsHtml(string text)
         {
-            // 
-            // Check if the text starts with an XML declaration
+            // A DOCTYPE html start is HTML; an XML declaration is not
             if (text.TrimStart().StartsWith("<!DOCTYPE html>", StringComparison.OrdinalIgnoreCase))
                 return true;
             else if (text.TrimStart().StartsWith("<?xml", StringComparison.OrdinalIgnoreCase))

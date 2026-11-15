@@ -275,7 +275,7 @@ namespace GenerallyPositive
         /// </summary>
         public Selector Selector { get; internal set; }
 
-        // ==================== Existing Properties ====================
+        // ==================== Properties ====================
 
         /// <summary>Name attribute of the element.</summary>
         public string Name
@@ -385,6 +385,11 @@ namespace GenerallyPositive
 
                 if (true == CssAttributes.ContainsKey("opacity"))
                     opacity = CssAttributes["opacity"]?.ToString() != "0";
+
+                // the CSS readers add ancestor-opacity 0 when an element above this one has opacity 0,
+                // which hides this one too
+                if (true == CssAttributes.ContainsKey("ancestor-opacity"))
+                    opacity = opacity && CssAttributes["ancestor-opacity"]?.ToString() != "0";
 
                 bool notHidden = visibilty && display && opacity;
 
@@ -654,7 +659,7 @@ namespace GenerallyPositive
             string seleniumValue = null;
 
             if (iWebElement != null)
-                seleniumValue = iWebElement.GetAttribute(char.ToUpper(attributeName[0]) + attributeName.Substring(1));   // NOTE: ours are lowercase, so search selenium as capitalized (TagName will get ours)
+                seleniumValue = iWebElement.GetAttribute(char.ToUpper(attributeName[0]) + attributeName.Substring(1));   // ours are lowercase, so Selenium is asked for the capitalized name (TagName gets ours)
 
             if (null == seleniumValue && Attributes.ContainsKey(attributeName))
             {
@@ -674,7 +679,7 @@ namespace GenerallyPositive
             }
             else
             {
-                // A property of ours with the name (Href, Value, Text) wins, as it always has. Otherwise the answer is
+                // A property of ours with the name (Href, Value, Text) wins. Otherwise the answer is
                 // what Selenium read, which is the only place an attribute such as colspan comes from.
                 PropertyInfo property = GetType().GetProperty(attributeName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
 
@@ -808,22 +813,22 @@ namespace GenerallyPositive
         /// <summary>
         /// Asynchronously releases resources (especially Puppeteer object handles).
         /// </summary>
-        public async Task DisposeAsync() // or void Dispose() with fire-and-forget
+        public async Task DisposeAsync()
         {
             if (disposed || string.IsNullOrEmpty(ElementHandle)) return;
 
             if (true == Browser.UsePuppeteer)
                 try
                 {
-                    // Use the same communicator/session that created it, or a global one
+                    // Release the handle through the browser's Puppeteer communicator
                     await Browser.PuppeteerCommunicator.SendCommand<object>(
                         DevToolsMethods.RuntimeReleaseObject,
                         new { objectId = ElementHandle },
-                        null); // however you track the right session
+                        null).ConfigureAwait(false);
                 }
                 catch
                 {
-                    // Session might already be detached — safe to ignore
+                    // The session may already be detached; ignore it
                 }
 
             ElementHandle = null;

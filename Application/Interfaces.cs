@@ -47,6 +47,8 @@ namespace GenerallyPositive.Application
     {
         [Action(Description = "Click the element that raises an Open dialog, then answer it with this file or folder.", Submenu = "Clicks")]
         IAllowSelectorActionOrAnySelector LeftClickAndOpen(GPALFile file);
+        [Action(Description = "Click the element that raises an Open dialog, then answer it with what is on the clipboard: the copied files for a FileList, otherwise a file written from it.", Submenu = "Clicks")]
+        IAllowSelectorActionOrAnySelector LeftClickAndOpen(IAllowClipboardInto clipboard);
         [Action(Description = "Click the element that raises a Save dialog, then answer it with this file. An existing file of that name is deleted first, so the dialog never asks whether to replace it.", Submenu = "Clicks")]
         IAllowSelectorActionOrAnySelector LeftClickAndSave(GPALFile file);
         [Action(Description = "Answer a file dialog that is already on screen with this file or folder.", Submenu = "Windows")]
@@ -57,6 +59,10 @@ namespace GenerallyPositive.Application
         [Data(Description = "Replace the control's text with this literal string", Submenu = "Fill In")] IAllowSelectorActionOrAnySelector FillInFrom(string textToUse);
         [Data(Description = "Add this literal string to the end of the control's text", Submenu = "Fill In")] IAllowSelectorActionOrAnySelector AppendFrom(string textToUse);
         [Data(Description = "Insert this literal string at the control's caret", Submenu = "Fill In")] IAllowSelectorActionOrAnySelector InsertFrom(string textToUse);
+
+        [Data(Description = "Replace the control's text with what is on the clipboard, in the form GetClipboard named", Submenu = "Fill In")] IAllowSelectorActionOrAnySelector FillInFrom(IAllowClipboardInto clipboard);
+        [Data(Description = "Add what is on the clipboard to the end of the control's text", Submenu = "Fill In")] IAllowSelectorActionOrAnySelector AppendFrom(IAllowClipboardInto clipboard);
+        [Data(Description = "Insert what is on the clipboard at the control's caret", Submenu = "Fill In")] IAllowSelectorActionOrAnySelector InsertFrom(IAllowClipboardInto clipboard);
 
         [Data(Description = "Replace the control's text with what the file holds, a value per control matched", Submenu = "Fill In")] IAllowSelectorActionOrAnySelector FillInFrom(GPALFile inputFile);
         [Data(Description = "Add what the file holds to the end of the control's text", Submenu = "Fill In")] IAllowSelectorActionOrAnySelector AppendFrom(GPALFile inputFile);
@@ -181,7 +187,7 @@ namespace GenerallyPositive.Application
         , IAllowWithInfiniteScroll
         , IAllowWithPages
     { }
-    // NOTE: Add to this list what is added above
+    // NOTE: keep this list the same as IAllowAfterAnySelector above, minus IAllowWithAllThatMatch
     public interface IAllowAfterAnySelectorExceptWithAll
         : IAllowSelectorAction
         , IAllowCallBack
@@ -224,6 +230,8 @@ namespace GenerallyPositive.Application
     {
         [File(Description = "Save the retrieved grid. Output format and delimiter are determined by the GPALFile (its extension, or explicit file settings).")]
         IAllowAllActionAndAnySelector SaveTo([GPALFile(Description = "The file to write")] GPALFile file);
+        [File(Description = "Put the retrieved grid on the clipboard as text, rows as lines and cells separated by tabs.")]
+        IAllowAllActionAndAnySelector SaveTo(IAllowClipboardInput clipboard);
         [File(Description = "Append the retrieved grid. Output format and delimiter are determined by the GPALFile (its extension, or explicit file settings).")]
         IAllowAllActionAndAnySelector AppendTo([GPALFile(Description = "The file to add to")] GPALFile file);
     }
@@ -312,7 +320,9 @@ namespace GenerallyPositive.Application
     public interface IAllowWaitFor 
     {
         [Action(Description = "Wait for the selectors on this unit of work to appear before carrying on, in milliseconds")]
-        IAllowAfterWaitForAndSizeControl WaitFor([Milliseconds] int waitForTimeInTicks); 
+        IAllowAfterWaitForAndSizeControl WaitFor([Milliseconds] int waitForTimeInTicks);
+        [Wait(Description = "Wait for the controls defined using .WithSelector to enter the specified state.")]
+        IAllowAfterWaitForAndSizeControl WaitFor(ElementState elementState);
     }
     public interface IAllowWithHardware 
     { 

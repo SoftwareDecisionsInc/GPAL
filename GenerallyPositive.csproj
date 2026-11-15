@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net48</TargetFramework>
+    <TargetFrameworks>net48;net10.0-windows</TargetFrameworks>
     <ProjectGuid>{BBAD2AB5-F425-4CED-A3B0-34969FC1FEC1}</ProjectGuid>
     <OutputType>Library</OutputType>
     <RootNamespace>GenerallyPositive</RootNamespace>
@@ -10,8 +10,21 @@
     <Platforms>AnyCPU;x64</Platforms>
     <!-- AssemblyInfo.cs holds the version and the rest; the SDK must not write them a second time -->
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <!-- bin\Debug and bin\Release as before, without a net48 folder under them -->
+  </PropertyGroup>
+
+  <!-- net48 builds to bin\Debug and bin\Release as before, without a net48 folder under them -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net48'">
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <!-- net10 builds to bin\Debug\net10.0-windows and bin\Release\net10.0-windows -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">
+    <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
+    <!-- WFO1000 is the WinForms designer serialization analyzer, an error by default from .NET 9 on.
+         CA1416 flags Windows-only calls; GPAL is Windows-only, and the assembly-level
+         SupportedOSPlatform attribute is not written because AssemblyInfo.cs owns the attributes -->
+    <NoWarn>$(NoWarn);WFO1000;CA1416</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
@@ -66,7 +79,7 @@
     <None Include="Common\WindowHelper.cs" />
   </ItemGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
     <Reference Include="Accessibility" />
     <Reference Include="Microsoft.VisualBasic" />
     <Reference Include="PresentationCore" />
@@ -94,8 +107,27 @@
     <PackageReference Include="Nager.PublicSuffix" Version="3.8.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="ReverseMarkdown" Version="6.2.1" />
+    <!-- opens 7z, rar and tar archives in a GPALFile path, and writes tar and tar.gz; zip and gz use .NET's own -->
+    <PackageReference Include="SharpCompress" Version="0.50.5" />
     <PackageReference Include="Selenium.Support" Version="4.51.0" />
     <PackageReference Include="Selenium.WebDriver" Version="4.51.0" />
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
+    <!-- the SQL Server client for both targets, and its Microsoft Entra ID (Active Directory) sign-in -->
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.1" />
+    <PackageReference Include="Microsoft.Data.SqlClient.Extensions.Azure" Version="7.1.1" />
+    <!-- the patched Pkcs on both targets. SqlClient asks for 8.0.1 on .NET Framework and MimeKit for 10.0.0 on
+         .NET 10, both with known vulnerabilities -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
+  </ItemGroup>
+
+  <!-- what net10 does not carry in the box: WMI and the WinForms chart control -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">
+    <PackageReference Include="System.Management" Version="10.0.0" />
+    <PackageReference Include="WinForms.DataVisualization" Version="1.10.0" />
+  </ItemGroup>
+
+  <!-- in the box on net10, packages on net48 -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
     <PackageReference Include="System.IO.Compression.ZipFile" Version="4.3.0" />
     <PackageReference Include="System.Text.Json" Version="10.0.12" />
     <!-- ValueTuple is in-box on net48 (mscorlib), so this package suppresses copy-local,
@@ -104,7 +136,6 @@
          GeneratePathProperty exposes $(PkgSystem_ValueTuple) so the AddValueTupleCopyLocal
          target below can land the 4.0.5.0 DLL in the output folder and satisfy the redirect. -->
     <PackageReference Include="System.ValueTuple" GeneratePathProperty="true" Version="4.6.2" />
-    <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
 
   <!-- Force the System.ValueTuple 4.0.5.0 DLL into the copy-local set. RAR treats it as an
@@ -112,7 +143,7 @@
        auto-generated binding redirect hard-demands assembly 4.0.5.0 (the in-box facade is only
        4.0.0.0). Injecting it here lands the DLL in this project's output and flows it through
        ProjectReference into every consuming test exe, satisfying the redirect at runtime. -->
-  <Target Name="AddValueTupleCopyLocal" AfterTargets="ResolveAssemblyReferences">
+  <Target Name="AddValueTupleCopyLocal" AfterTargets="ResolveAssemblyReferences" Condition="'$(TargetFramework)' == 'net48'">
     <ItemGroup>
       <ReferenceCopyLocalPaths Include="$(PkgSystem_ValueTuple)\lib\net462\System.ValueTuple.dll" />
     </ItemGroup>
@@ -121,7 +152,7 @@
   <!-- programs that reference GPAL do not copy the DLL above out of GPAL's bin on their own;
        as a copied item it lands beside every one of them, as it did before. It is added in a target,
        after references resolve, because a DLL listed as a project item would become what GPAL compiles against -->
-  <Target Name="CopyValueTupleToPrograms" BeforeTargets="AssignTargetPaths">
+  <Target Name="CopyValueTupleToPrograms" BeforeTargets="AssignTargetPaths" Condition="'$(TargetFramework)' == 'net48'">
     <ItemGroup>
       <None Include="$(PkgSystem_ValueTuple)\lib\net462\System.ValueTuple.dll" Link="System.ValueTuple.dll" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>

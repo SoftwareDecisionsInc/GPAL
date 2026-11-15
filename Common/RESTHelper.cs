@@ -163,7 +163,7 @@ namespace GenerallyPositive
             [ApiEndpoint.StopCasting] = "stop-casting",
             [ApiEndpoint.SwitchToDefaultContent] = "switch-to-default-content",
             [ApiEndpoint.SwitchToElement] = "switch-to-element",
-            [ApiEndpoint.SwitchToFrame] = "switch-to-frame",    // NOTE: puppeteer only, not used by rest, ottomagic runs in every frame
+            [ApiEndpoint.SwitchToFrame] = "switch-to-frame",    // Puppeteer only; OttoMagic runs in every frame, so REST does not use it
             [ApiEndpoint.SwitchToShadowRoot] = "switch-to-shadow-root",
             [ApiEndpoint.TabCount] = "tab-count",
             [ApiEndpoint.TopBrowser] = "top-browser",
@@ -227,7 +227,7 @@ namespace GenerallyPositive
         internal async Task<string> Call(string endpoint, object parameters = null, string httpMethod = "GET", ContentEncoding contentEncoding = ContentEncoding.Json)
         {
             // Use a full-url endpoint as is. A browser session's base is its origin, but pages call other origins, and
-            // appending gave an invalid url.
+            // appending one to the base makes an invalid url.
             string url = true == endpoint?.StartsWith("http", StringComparison.OrdinalIgnoreCase)
                 ? endpoint
                 : $"{_browserExtensionApiBase}{endpoint}";
@@ -363,7 +363,6 @@ namespace GenerallyPositive
             return default;
         }
 
-        // TODO: add out param to return the server status code
         // Headers .NET requires on HttpContent; all others go on the request.
         private static readonly string[] contentHeaders =
         {
@@ -500,7 +499,10 @@ namespace GenerallyPositive
                     {
                         var request = new HttpRequestMessage(new HttpMethod(httpMethod.ToUpperInvariant()), route);
 
-                        request.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+                        // JSON unless the caller asked for something else with WithHeader("Accept", ...), which the loop below
+                        // sends instead
+                        if (false == _restClient._headers.Keys.Any(name => true == "Accept".Equals(name, StringComparison.OrdinalIgnoreCase)))
+                            request.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
 
                         foreach (var header in _restClient._headers)
                         {

@@ -72,7 +72,8 @@ namespace GenerallyPositive
 
         /************** CAPTURE SCREEN ******************/
         // https://stackoverflow.com/questions/4978157/how-to-search-for-an-image-on-screen-in-c
-        // TODO: Capture screen for Applications
+        // TODO: an Application gets a capture of the primary screen, not its window; an Application on a hidden
+        // desktop gets the user's screen instead of its window
 
         /// <summary>
         /// Captures the current screen or visible browser tab.
@@ -104,7 +105,7 @@ namespace GenerallyPositive
             // capture.
             base64StringInternal = null;
 
-            bool headlessMode = false;   // assume headless as we might be called before we even have a browser created
+            bool headlessMode = false;   // false until a browser says otherwise; this can run before any browser exists
             Bitmap image = new Bitmap(1920, 1080);
             bool isBrowser = typeof(Browser.Browser) == ApplicationOrBrowser?.GetType();
             if (true == isBrowser)
@@ -194,7 +195,7 @@ namespace GenerallyPositive
                                             .Trim('"');                    // remove surrounding quotes if present
                     }
 
-                    // also trim any leftover whitespace (rare but safe)
+                    // trim any leftover whitespace
                     base64StringInternal = base64StringInternal.Trim();
 
                     imageBytes = Convert.FromBase64String(base64StringInternal);
@@ -275,7 +276,6 @@ namespace GenerallyPositive
         ///       .SaveToFile(new GPALFile(@"C:\Screenshots\login.png"));
         /// </code>
         /// </example>
-        [File(Description = "Save to file (overwrite)")]
         public IAllowGraphicSettings SaveTo(GPALFile file)
         {
             SaveScreenshot(file.Next, ScreenShot);

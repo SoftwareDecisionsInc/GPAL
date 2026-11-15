@@ -34,7 +34,7 @@ public class IPAddressYamlConverter : IYamlTypeConverter
         {
             return ipAddress;
         }
-        return null; // Handle parsing failure accordingly
+        return null; // the text is not an IP address
     }
 
     public void WriteYaml(IEmitter emitter, object value, Type type)
@@ -45,7 +45,7 @@ public class IPAddressYamlConverter : IYamlTypeConverter
         }
         else
         {
-            emitter.Emit(new Scalar(null)); // Handle writing failure accordingly
+            emitter.Emit(new Scalar(null)); // not an IP address, written as null
         }
     }
     public object ReadYaml(IParser parser, Type type, ObjectDeserializer rootDeserializer)
@@ -78,18 +78,14 @@ public class IPAddressYamlConverter : IYamlTypeConverter
     {
         if (value is IPAddress ipAddress)
         {
-            // Emit the mapping for IP address in YAML format
-            emitter.Emit(new MappingStart()); // Start a new mapping
-
-            emitter.Emit(new Scalar("ipAddress")); // Emit the field name
-            serializer(ipAddress.ToString()); // Use the serializer to handle the value
-
-            emitter.Emit(new MappingEnd()); // End the mapping
+            // the address as its text, 192.168.0.1, as every format writes it; the reader above still takes the
+            // ipAddress: mapping earlier versions wrote
+            emitter.Emit(new Scalar(ipAddress.ToString()));
         }
         else if (value == null)
         {
-            // Write null instead of throwing; one null entry stopped the whole conversion. The other overload already
-            // does this.
+            // Write null instead of throwing, so one null entry does not stop the conversion, as the other overload
+            // does.
             emitter.Emit(new Scalar("null"));
         }
         else

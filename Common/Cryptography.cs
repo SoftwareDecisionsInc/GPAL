@@ -43,7 +43,7 @@ namespace GenerallyPositive
         private byte[] _salt;
         private int _iterationCount = 10000; // Default for PBKDF2
         private byte[] _inputData;
-        private byte[] _signature; // Added for verification
+        private byte[] _signature; // the signature Verify checks
 
         internal Cryptography()
         { }
@@ -479,7 +479,7 @@ namespace GenerallyPositive
             ISigner signer = SignerUtilities.GetSigner(SignerName());
             signer.Init(false, keyParam);
             signer.BlockUpdate(_inputData, 0, _inputData.Length);
-            return signer.VerifySignature(_signature); // Assumes _inputData is the signature
+            return signer.VerifySignature(_signature); // _inputData is the signed data
         }
 
         private byte[] PerformHashing()

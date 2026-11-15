@@ -25,8 +25,7 @@ using HtmlAgilityPack;
 using ReverseMarkdown;
 using static GenerallyPositive.Enums;
 
-// written by grok
-// inspired by https://substack.thewebscraping.club/p/why-scraping-return-markdown-llm-ai?utm_source=post-email-title&publication_id=1023328&post_id=184656666
+// Background: https://substack.thewebscraping.club/p/why-scraping-return-markdown-llm-ai?utm_source=post-email-title&publication_id=1023328&post_id=184656666
 // Why LLM-Ready Scrapers Return Content in Markdown: A Deep Dive
 namespace GenerallyPositive
 {
@@ -115,7 +114,7 @@ namespace GenerallyPositive
 
                 var converter = new Converter(config);
 
-                if (true == result.Url.ToLower().Contains("sitemap") ||    // does url contain 'sitemap' it just might be
+                if (true == result.Url.ToLower().Contains("sitemap") ||    // a url naming sitemap
                     true == result.Url.ToLower().EndsWith(".xml") ||
                     true == SitemapExtractor.IsValidSitemapContent(mainContentHtml))
                 {
@@ -125,7 +124,6 @@ namespace GenerallyPositive
                         : rules.SitemapBaseUrl;
 
                     result.Markdown = ExtractSitemapAsMarkdown(mainContentHtml, sitemapBaseUrl);
-                    // Optionally log or tag: result.IsSitemap = true;
                 }
                 else
                 {
@@ -139,8 +137,7 @@ namespace GenerallyPositive
 
                 // === POST-CONVERSION READABILITY CLEANUP ===
 
-                // 1. Collapse runs of four or more blank lines; keep section gaps. Matching five or more let exactly
-                // four through.
+                // 1. Collapse runs of four or more blank lines into one section gap.
                 if (rules.EnabledPasses.Contains("CollapseExcessiveBlanks"))
                     result.Markdown = Regex.Replace(result.Markdown, @"(\r?\n\s*){4,}", "\n\n\n", RegexOptions.Multiline);
 
@@ -169,7 +166,7 @@ namespace GenerallyPositive
                         @"(?im)^[ \t]*(Play|Pause|Unmute|Mute|Fullscreen|Exit Fullscreen|Picture-in-Picture|Playback Rate|Captions|Subtitles|Descriptions|Chapters|Watch|Stream Type\s+LIVE|Current Time\s+[\d:]+|Duration\s+[\d:]+|Remaining Time\s+-?[\d:]+|Loaded:\s*[\d.%]*|Progress:\s*[\d.%]*|Seek to live[^\r\n]*|This is a modal window[^\r\n]*|(Beginning|End) of dialog[^\r\n]*|/|-?\d{1,2}:\d{2})[ \t]*\r?$",
                         "", RegexOptions.Multiline);
 
-                // 3. Nuclear grid breaker: repeatedly split ALL consecutive images until none remain
+                // 3. Image grid breaker: split every run of consecutive images onto separate lines
                 // Insert \n after ) in every occurrence of ")[!\["
                 if (rules.EnabledPasses.Contains("ImageGridBreaker"))
                 {
@@ -185,7 +182,7 @@ namespace GenerallyPositive
                         if (found == -1)
                             break;
 
-                        // Insert \n right after the ) — i.e. after position found
+                        // Insert \n right after the ) at the position found
                         result.Markdown = result.Markdown.Insert(found + 1, "\n");
 
                         // Resume just past the ) and the newline we inserted so we do not re-match here
@@ -284,10 +281,9 @@ namespace GenerallyPositive
                 result.Success = false;
                 result.Message = ex.Message;
 
-                // Last-ditch recovery: some pages make a library step throw (e.g. ReverseMarkdown can throw
-                // "startIndex cannot be larger than length of string" on certain malformed HTML). Rather than
-                // fail the whole digest - which aborts a batch walk - salvage the readable text so the page
-                // still yields something usable and the run continues.
+                // Some pages make a library step throw (e.g. ReverseMarkdown throws "startIndex cannot be larger
+                // than length of string" on some malformed HTML). Salvage the readable text instead of failing the
+                // digest, so a batch walk continues.
                 try
                 {
                     string fallback = HtmlToPlainText(htmlSource);

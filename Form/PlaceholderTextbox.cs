@@ -43,7 +43,13 @@ namespace GenerallyPositive.GPALForm
             TextChanged += OnTextChanged;
         }
 
+        // .NET 10 TextBox has a PlaceholderText of its own; this one hides it and keeps the gray text in the box
+        // itself, in plain text even in a password box, the same on both targets
+#if NET
+        public new string PlaceholderText
+#else
         public string PlaceholderText
+#endif
         {
             get { return placeholderText; }
             set

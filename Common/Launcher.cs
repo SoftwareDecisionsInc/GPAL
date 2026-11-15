@@ -25,7 +25,6 @@ using static GenerallyPositive.Enums;
 
 namespace GenerallyPositive
 {
-    // written by Grok
     public class Launcher : IAllowExecutableSetup, IAllowRunningExecutable, IAllowWaitingExecutable
     {
         public string Name { get; internal set; }

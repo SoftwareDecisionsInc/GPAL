@@ -76,7 +76,7 @@ namespace GenerallyPositive.Application
             }
             else
             {
-                // Your existing custom logic – kept unchanged
+                // Below the root, walk the children of the requested control type.
                 List<AutomationElement> automationElements = GetAllChildren(element, idx, controlType);
                 foreach (AutomationElement elem in automationElements)
                     tmpElems.Add(new GPALAutomationElement(elem));

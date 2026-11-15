@@ -535,7 +535,7 @@ namespace GenerallyPositive
                 // A row index outside the grid returns an empty row and leaves the grid as it is. Published at DEBUG.
                 if (index >= data.Count || 0 > index)
                     GPAL.PublishSimpleEvent(GPALEventType.DEBUG,
-                        $"Row [{index}] was asked for and the grid holds [{data.Count}], so an empty row was answered with",
+                        $"Row [{index}] was asked for and the grid holds [{data.Count}], so an empty row is given back",
                         this, GPALObjectType.Other);
 
                 return retVal;
@@ -703,21 +703,43 @@ namespace GenerallyPositive
         /// <returns>Fluent interface to continue grid operations.</returns>
         public IAllowGridActions<T> InputFrom(GPALFile input)
         {
-            FileHelper.TokenizeFile(input); // CAVEAT: NOTE: could tokenize multiple files? if wildcard? but we only grab top list
-
-            // Copy cell by cell; Clone() returns a GPALGrid, which cannot be cast to List<List<T>>.
-            IGPALGrid<string> tokens = ((IGPALFileInternal)input).TokenList[0];
-
-            data = new List<List<T>>();
-
-            foreach (List<string> row in tokens)
+            // a missing file, or a wildcard that matched no file, is reported as the converter reports it, and the grid is
+            // left as it was
+            if (false == System.IO.File.Exists(input.Filename))
+                GPAL.PublishSimpleEvent(GPALEventType.ERROR, $"File missing: [{input.Filename}]", input, GPALObjectType.Other);
+            else
             {
-                List<T> newRow = new List<T>();
+                // each file read gets a grid of its own, so TokenList[0] holds the first file's rows. A json, yaml, xml or html
+                // file holds records, which start with the names of their fields, as the grid GPAL.Converter saves them to
+                // does; their records are kept for that
+                DataFormat firstFormat = ConverterHelper.GetDataFormatFromExtension(input.Filenames[0]);
+                bool recordsFile = DataFormat.JSON == firstFormat || DataFormat.YAML == firstFormat || DataFormat.XML == firstFormat || DataFormat.HTML == firstFormat;
+                FileHelper.TokenizeFile(input, true == recordsFile ? new ConverterSettings() : null);
 
-                foreach (string cell in row)
-                    newRow.Add(null == cell ? default(T) : (T)Convert.ChangeType(cell, typeof(T)));
+                // Copy cell by cell; Clone() returns a GPALGrid, which cannot be cast to List<List<T>>.
+                IGPALGrid<string> tokens = ((IGPALFileInternal)input).TokenList[0];
+                if (true == recordsFile && 0 < ((IGPALFileInternal)input).FileDictionary.Count)
+                    ConverterHelper.ConvertInputDictionaryToDelimitedAndGrid(new ConverterSettings
+                    {
+                        FirstLineIsColumnHeaders = true,
+                        InputDictionary = new List<Dictionary<object, dynamic>> { ((IGPALFileInternal)input).FileDictionary[0] },
+                    }, out tokens, firstFormat);
 
-                data.Add(newRow);
+                // the grid takes the first file of several, as one object does
+                if (1 < ((IGPALFileInternal)input).TokenList.Count)
+                    GPAL.PublishSimpleEvent(GPALEventType.WARNING, $"The grid reads one file and was given [{((IGPALFileInternal)input).TokenList.Count}], so it holds the rows of the first, [{input.Filename}]; save to a grid through GPAL.Converter to take them all", this, GPALObjectType.Other);
+
+                data = new List<List<T>>();
+
+                foreach (List<string> row in tokens)
+                {
+                    List<T> newRow = new List<T>();
+
+                    foreach (string cell in row)
+                        newRow.Add(null == cell ? default(T) : (T)Convert.ChangeType(cell, typeof(T)));
+
+                    data.Add(newRow);
+                }
             }
 
             return this;

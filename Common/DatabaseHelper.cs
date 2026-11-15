@@ -17,7 +17,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Data.SqlClient;
+using Microsoft.Data.SqlClient;
 using System.Drawing;
 using System.Linq;
 using System.Text;
@@ -28,11 +28,38 @@ namespace GenerallyPositive
 {
     internal class DatabaseHelper
     {
+        // Opens a connection string with System.Data.SqlClient's behavior on Microsoft.Data.SqlClient.
+        // - Asynchronous Processing (or Async) and Context Connection are taken out: this client always allows
+        //   asynchronous calls, a context connection exists only inside SQL Server itself, and it rejects both keywords.
+        // - Without Encrypt, the connection is encrypted only when the server requires it, and then without checking
+        //   the server's certificate unless TrustServerCertificate says to. This client otherwise encrypts every
+        //   connection and refuses a certificate the machine does not trust, such as a local SQL Server Express's.
+        // A connection string that sets Encrypt gets what it sets.
+        private static SqlConnection NewConnection(string connectionString)
+        {
+            System.Data.Common.DbConnectionStringBuilder given = new System.Data.Common.DbConnectionStringBuilder { ConnectionString = connectionString };
+
+            foreach (string unsupported in new[] { "Asynchronous Processing", "Async", "Context Connection" })
+                given.Remove(unsupported);
+
+            SqlConnectionStringBuilder builder = new SqlConnectionStringBuilder(given.ConnectionString);
+
+            if (false == given.ContainsKey("Encrypt"))
+            {
+                builder.Encrypt = SqlConnectionEncryptOption.Optional;
+
+                if (false == given.ContainsKey("TrustServerCertificate") && false == given.ContainsKey("Trust Server Certificate"))
+                    builder.TrustServerCertificate = true;
+            }
+
+            return new SqlConnection(builder.ConnectionString);
+        }
+
         public static SqlConnection OpenConnection(DatabaseSettings databaseSettings)
         {
-            // A connection that failed to open, or that the server dropped, is kept but closed, and was handed out as
-            // is: every later call reported no open connection, even once the server was back. It is dropped and
-            // opened again. Not while a transaction is open, as a new connection would silently lose it.
+            // A connection that failed to open, or that the server dropped, stays closed. Drop it and open a new one,
+            // so the next call works once the server is back. Not while a transaction is open; a new connection would
+            // silently lose it.
             if (null != databaseSettings.Connection && ConnectionState.Open != databaseSettings.Connection.State && null == databaseSettings.SqlTransaction)
             {
                 databaseSettings.Connection.Dispose();
@@ -44,7 +71,7 @@ namespace GenerallyPositive
                 try
                 {
                     if (null != databaseSettings.ConnectionString)
-                        databaseSettings.Connection = new SqlConnection(databaseSettings.ConnectionString);
+                        databaseSettings.Connection = NewConnection(databaseSettings.ConnectionString);
                     else if (Enums.DatabaseType.SQLServer == databaseSettings.DatabaseType)
                     {
                         StringBuilder sb = new StringBuilder();
@@ -55,7 +82,7 @@ namespace GenerallyPositive
                         {
                             sb.Append($"User id={databaseSettings.UserName};password={databaseSettings.Password};");
                         }
-                        databaseSettings.Connection = new SqlConnection(sb.ToString());
+                        databaseSettings.Connection = NewConnection(sb.ToString());
 
                     }
 
@@ -146,16 +173,17 @@ namespace GenerallyPositive
         }
 
         /// <summary>
-        /// Adds the read's one row of parameters: the grid's first row, or the values added one at a time. Uses typed
-        /// definitions if any, otherwise names.
+        /// Adds the read's one row of parameters: the grid's first row, none when the grid has no rows, or the values
+        /// added one at a time when no grid was given. Uses typed definitions if any, otherwise names.
         /// </summary>
         /// <param name="databaseSettings">Settings holding the parameters.</param>
         /// <param name="command">The command about to run; null when there is nothing to read.</param>
         private static void AddReadParameters(DatabaseSettings databaseSettings, SqlCommand command)
         {
-            List<string> values = 0 < (databaseSettings.ParametersGrid?.Rows ?? 0)
-                ? new List<string>(databaseSettings.ParametersGrid[0])
-                : databaseSettings.ParametersList;
+            List<string> values = databaseSettings.ParametersList;
+
+            if (null != databaseSettings.ParametersGrid)
+                values = 0 < databaseSettings.ParametersGrid.Rows ? new List<string>(databaseSettings.ParametersGrid[0]) : null;
 
             if (null != command && 0 < (values?.Count ?? 0))
             {
@@ -448,7 +476,7 @@ namespace GenerallyPositive
         }
         /// <summary>
         /// Execute SQL passing in parameters
-        /// NOTE: parameterTokens CAN be a Grid, in which case it will be assumed to be the ONE parameter which is a table value parameter
+        /// When ColumnList has a Structured column, parameterTokens is the one table-valued parameter
         /// </summary>
         /// <param name="databaseSettings"></param>
         /// <param name="sqlToRun"></param>
@@ -494,6 +522,10 @@ namespace GenerallyPositive
             else if (string.IsNullOrWhiteSpace(sqlToRun))
                 GPAL.PublishSimpleEvent(GPALEventType.ERROR,
                     "Nothing said what to run. Set one of .WithSQLCommand, .WithCreateAs, .WithUpdateAs, .WithDeleteAs or .WithStoredProcedure, or give .Create a .WithTableName and its parameters to write",
+                    databaseSettings.Database, GPALObjectType.Database);
+            else if (null != parameterTokens && 0 == parameterTokens.Rows)
+                GPAL.PublishSimpleEvent(GPALEventType.WARNING,
+                    "The parameter grid has no rows, so nothing was run",
                     databaseSettings.Database, GPALObjectType.Database);
             else
             {
@@ -837,6 +869,7 @@ namespace GenerallyPositive
                 currentUOW.InputDatabase = inputDatabase;
             int rowCount = DatabaseHelper.GetGrid(((GPALDatabase)inputDatabase).DatabaseSettings, out tokens);
             ((GPALDatabase)inputDatabase).Tokens = tokens;
+            ((GPALDatabase)inputDatabase).DatabaseSettings.ParametersUsedAt = DateTime.Now;   // the read ran with the parameters
         }
         /// <summary>
         /// Converts a DataTable into string rows for the parameterized paths, and returns its column names and types.
@@ -866,6 +899,7 @@ namespace GenerallyPositive
             IGPALGrid<string> tokens;
             int rowCount = DatabaseHelper.GetGrid(inputDatabase.DatabaseSettings, out tokens);
             inputDatabase.Tokens = tokens;
+            inputDatabase.DatabaseSettings.ParametersUsedAt = DateTime.Now;   // the read ran with the parameters
         }
     }
 

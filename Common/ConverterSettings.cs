@@ -64,9 +64,11 @@ namespace GenerallyPositive
         internal Type OutputClassElementType { get; set; }
         internal List<DataFormat> InDataFormat { get; set; }
         internal DataFormat OutDataFormat { get; set; } = DataFormat.NOTSET;
+        internal DataFormat OutputTypeGiven { get; set; } = DataFormat.NOTSET;  // set via WithOutputType(); the format a .txt or .log output, which names none, is written in; reset per WithInput
         internal bool IgnoreFirstLineColumnHeaders { get; set; }  // overrides each individual file settings or used with non-file types
         internal bool FirstLineIsColumnHeaders { get; set; }  // overrides each individual file settings or used with non-file types; reset per-output-file during Convert()
         internal bool InputFirstLineIsColumnHeaders { get; set; }  // set via WithFirstLineHasColumnNames(); preserved across all SaveTo/AppendTo calls in a chain
+        internal bool GridHasNamesRow { get; set; }  // set by ConvertInputDictionaryToDelimitedAndGrid: true when the grid it made starts with a row of column names
         internal bool FieldsEnclosedInQuotes { get; set; }  // overrides each individual file settings or used with non-file types
         internal char? InDelimiter { get; set; }  // overrides each individual file settings or used with non-file types
         internal char? OutDelimiter { get; set; }  // overrides each individual file settings or used with non-file types

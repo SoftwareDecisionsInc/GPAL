@@ -15,6 +15,7 @@
 // =============================================================================
 
 using System.Collections.Generic;
+using System.Linq;
 using YamlDotNet.Core;
 using YamlDotNet.Core.Events;
 using YamlDotNet.Serialization;
@@ -59,10 +60,14 @@ public class HumanReadableAliasEventEmitter : ChainedEventEmitter
         return readable;
     }
 
+    // The type name without its generic arity and without the characters an anchor cannot hold, so an Address[] is
+    // Address and an int[,] is int
     private static string CleanTypeName(string name)
     {
         if (name == null) return "object";
         var backtick = name.IndexOf('`');
-        return backtick >= 0 ? name.Substring(0, backtick) : name;
+        var clean = backtick >= 0 ? name.Substring(0, backtick) : name;
+        clean = new string(clean.Where(c => false == "[]{},".Contains(c) && false == char.IsWhiteSpace(c)).ToArray());
+        return 0 == clean.Length ? "object" : clean;
     }
 }

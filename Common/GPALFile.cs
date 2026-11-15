@@ -68,6 +68,7 @@ namespace GenerallyPositive
         {
             ((IGPALFileInternal)this).FileSettings = new GPALFileSettings();
             ((IGPALFileInternal)this).FileSettings.Filenames.Add(fileName);
+            ((IGPALFileInternal)this).FileSettings.AddName(1);
             ((IGPALFileInternal)this).FileDictionary = new List<Dictionary<object, dynamic>>();
         }
         #region <Fluent Interface>
@@ -80,7 +81,7 @@ namespace GenerallyPositive
         /// <returns>Fluent interface to define more File settings.</returns>
         public IAllowFileSettings WithOverwriteFile(bool overwriteFile)
         {
-            ((IGPALFileInternal)this).FileSettings.OverwriteFile.Add(overwriteFile);
+            ((IGPALFileInternal)this).FileSettings.Give(nameof(GPALFileSettings.OverwriteFile), overwriteFile);
             return this;
         }
         /// <summary>
@@ -114,7 +115,7 @@ namespace GenerallyPositive
         /// <returns>Fluent interface to define more File settings</returns>
         public IAllowFileSettings WithDelimiter(char delimiter)
         {
-            ((IGPALFileInternal)this).FileSettings.Delimiter.Add(delimiter);
+            ((IGPALFileInternal)this).FileSettings.Give(nameof(GPALFileSettings.Delimiter), (char?)delimiter);
             return this;
         }
         /// <summary>
@@ -125,7 +126,7 @@ namespace GenerallyPositive
         /// <returns>Fluent interface to define more File settings.</returns>
         public IAllowFileSettings WithColumnsEnclosedInQuotes(bool fieldsInQuotes)
         {
-            ((IGPALFileInternal)this).FileSettings.FieldsEnclosedInQuotes.Add(fieldsInQuotes);
+            ((IGPALFileInternal)this).FileSettings.Give(nameof(GPALFileSettings.FieldsEnclosedInQuotes), fieldsInQuotes);
             return this;
         }
         /// <summary>
@@ -135,7 +136,7 @@ namespace GenerallyPositive
         /// <returns>Fluent interface to define more File settings.</returns>
         public IAllowFileSettings WithFirstLineIsColumnNames(bool firstLineIsColumnNames)
         {
-            ((IGPALFileInternal)this).FileSettings.FirstLineIsColumnNames.Add(firstLineIsColumnNames);
+            ((IGPALFileInternal)this).FileSettings.Give(nameof(GPALFileSettings.FirstLineIsColumnNames), firstLineIsColumnNames);
             return this;
         }
         /// <summary>
@@ -145,7 +146,7 @@ namespace GenerallyPositive
         /// <returns>Fluent interface to define more File settings.</returns>
         public IAllowFileSettings WithIgnoreFirstLineColumnNames(bool ignoreFirstLine = true)
         {
-            ((IGPALFileInternal)this).FileSettings.IgnoreFirstLineColumnNames.Add(ignoreFirstLine);
+            ((IGPALFileInternal)this).FileSettings.Give(nameof(GPALFileSettings.IgnoreFirstLineColumnNames), ignoreFirstLine);
             return this;
         }
         /// <summary>
@@ -185,7 +186,12 @@ namespace GenerallyPositive
         /// <summary>
         /// The filename to load input tokens from.<br/>
         /// An http or https url is downloaded here, in WithFileName, to GPAL's temp directory, and the local file is
-        /// used from then on.
+        /// used from then on.<br/>
+        /// A zip, gz, 7z, rar or tar in the path opens like a folder: export.zip\*.csv takes the csv files at the top of
+        /// the zip out to GPAL's temp directory, and those are the files from then on. The archive is known by what it
+        /// holds, so an .xpi, .jar or a download with no extension opens too. A gz holds one file, its name without
+        /// .gz, so data.csv.gz\* is data.csv; a .tar.gz or .tgz opens as the tar it holds. A url works the same when a
+        /// wildcard follows the archive: https://example.com/export.zip/*.csv is fetched, then opened.
         /// </summary>
         /// <example>
         /// <code>
@@ -195,15 +201,31 @@ namespace GenerallyPositive
         ///     GPAL.Converter.WithInput(versions).SaveTo(ref grid);
         /// </code>
         /// </example>
-        /// <param name="fileName">The filename, wildcard pattern, or an http/https url</param>
+        /// <param name="fileName">The filename, wildcard pattern, path into an archive, or an http/https url</param>
         /// <returns>Fluent interface to define more File settings</returns>
         public IAllowFileSettings WithFileName([FilePath] string fileName)
         {
             fileName = Environment.ExpandEnvironmentVariables(fileName);
+            int filesBefore = ((IGPALFileInternal)this).FileSettings.Filenames.Count;
+
+            // the path inside an archive a url names, as in https://example.com/export.zip/*.csv
+            string inside = null;
 
             // Check for a url first; a query string's "?" looks like a wildcard.
             if (true == FileHelper.IsWebAddress(fileName))
             {
+                // A wildcard after an archive such as .zip/ or .7z/ means inside it, as on disk: the archive is fetched,
+                // then opened below. Without a wildcard the whole url is fetched, so a link like .../tool.zip/download fetches the link.
+                // Only the path is looked at, since .zip is also a domain, and a query string such as a signature
+                // goes with the archive's url
+                System.Text.RegularExpressions.Match throughArchive = System.Text.RegularExpressions.Regex.Match(fileName, @"^(https?://[^/?#]+/[^?#]*?\.(?:" + FileHelper.ArchiveExtensionPattern() + @"))/([^?#]*\*[^?#]*)(\?[^#]*)?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+                if (true == throughArchive.Success)
+                {
+                    fileName = throughArchive.Groups[1].Value + throughArchive.Groups[3].Value;
+                    inside = throughArchive.Groups[2].Value;
+                }
+
                 Browser.IBrowser browser = ((IGPALFileInternal)this).FileSettings.Browser;
                 string name = Path.GetFileName(new Uri(fileName).LocalPath);
                 string localPath = Path.Combine(GPAL.TempDirectory(), true == string.IsNullOrWhiteSpace(name) ? "download" : name);
@@ -222,15 +244,52 @@ namespace GenerallyPositive
                 else if (null == browser)
                     FileHelper.DownloadToFile(localPath, fileName);
 
-                fileName = localPath;
+                fileName = null == inside ? localPath : localPath + Path.DirectorySeparatorChar + inside;
             }
 
-            if (true == fileName.Contains('*') || true == fileName.Contains('?'))
+            // A zip, gz, 7z, rar or tar in the middle of the path is opened like a folder, and the files named inside it are taken
+            // out to GPAL's temp directory. From here on they are ordinary files
+            string archive = null;
+            string[] matches = null;
+
+            try
+            {
+                archive = FileHelper.ArchiveInPath(fileName);
+
+                if (null != archive)
+                {
+                    List<string> extracted = FileHelper.ExtractFromArchive(archive, fileName.Substring(archive.Length + 1));
+
+                    foreach (string file in extracted)
+                        ((IGPALFileInternal)this).FileSettings.ExtractedFrom[file] = archive;
+
+                    matches = extracted.ToArray();
+                }
+            }
+            catch (Exception ex)
+            {
+                GPAL.PublishSimpleEvent(Enums.GPALEventType.EXCEPTION, $"Unable to open [{archive ?? fileName}] as an archive.", this, Enums.GPALObjectType.GPALFile, ex);
+                matches = new string[0];
+            }
+
+            // a url that gave no zip or gz, such as an error page or a fetch that failed, has nothing inside it
+            if (null == matches && null != inside)
+            {
+                GPAL.PublishSimpleEvent(Enums.GPALEventType.WARNING, $"[{((IGPALFileInternal)this).FileSettings.SourceUrl.Split('?')[0]}] did not give an archive, so nothing inside it could be opened.", this, Enums.GPALObjectType.GPALFile);
+                matches = new string[0];
+            }
+            else if (null == matches && (true == fileName.Contains('*') || true == fileName.Contains('?')))
             {
                 string directory = Path.GetDirectoryName(fileName);
                 string filenamePart = Path.GetFileName(fileName);
-                string[] matches = Directory.GetFiles(false == string.IsNullOrEmpty(directory) ? directory : @".\", filenamePart);
+                string folderToSearch = false == string.IsNullOrEmpty(directory) ? directory : @".\";
 
+                // a folder that is not there, or a file in the path that is not an archive, matches nothing
+                matches = true == Directory.Exists(folderToSearch) ? Directory.GetFiles(folderToSearch, filenamePart) : new string[0];
+            }
+
+            if (null != matches)
+            {
                 if (0 == matches.Length)
                 {
                     GPAL.PublishSimpleEvent(Enums.GPALEventType.WARNING, $"No files matched the wildcard pattern [{fileName}].", this, Enums.GPALObjectType.GPALFile);
@@ -281,76 +340,73 @@ namespace GenerallyPositive
                 ((IGPALFileInternal)this).FileSettings.FileCount++;
             }
 
+            // the settings given after this name go to every file it added
+            ((IGPALFileInternal)this).FileSettings.AddName(((IGPALFileInternal)this).FileSettings.Filenames.Count - filesBefore);
+
             return this;
         }
         /// <summary>
-        /// .WithColumnName adds columns to the same 'most recent' column list.
-        /// NOTE: .WithColumnNameS allows You to define a column list for each supplied filename.
-        /// NOTE: If you use .WithColumnNameS, a new blank column list row is added to use with .WithColumn
+        /// Gives the current unit a list of column names: the next name's, or, when every name of the unit has its
+        /// own, in place of the last list given, with a warning.
+        /// </summary>
+        /// <param name="columnNames">The column names</param>
+        private void GiveColumnNames(List<string> columnNames)
+        {
+            GPALFileSettings fileSettings = ((IGPALFileInternal)this).FileSettings;
+            List<object> given = fileSettings.GivenInCurrentUnit(nameof(GPALFileSettings.ColumnList));
+
+            if (0 < given.Count && given.Count >= fileSettings.NamesInCurrentUnit())
+            {
+                GPAL.PublishSimpleEvent(Enums.GPALEventType.WARNING, $"Overwriting existing column names [{string.Join(", ", (List<string>)given[given.Count - 1])}] with new names [{string.Join(", ", columnNames)}]");
+                given[given.Count - 1] = columnNames;
+            }
+            else
+                given.Add(columnNames);
+
+            fileSettings.ApplyUnits();
+        }
+        /// <summary>
+        /// .WithColumnName adds a column name to the last column name list given for the file names before it, and
+        /// starts one when none was given.
         /// </summary>
         /// <param name="columnName">The column name to append to the current file's column name list.</param>
         /// <returns>Fluent interface to define more File settings.</returns>
         public IAllowFileSettings WithColumnName(string columnName)
         {
-            if (((IGPALFileInternal)this).FileSettings.FileCount > ((IGPALFileInternal)this).FileSettings.ColumnList.Count())
-                ((IGPALFileInternal)this).FileSettings.ColumnList.AddRow(new List<string>());
+            GPALFileSettings fileSettings = ((IGPALFileInternal)this).FileSettings;
+            List<object> given = fileSettings.GivenInCurrentUnit(nameof(GPALFileSettings.ColumnList));
 
-            ((IGPALFileInternal)this).FileSettings.ColumnList[((IGPALFileInternal)this).FileSettings.ColumnList.Count() - 1].Add(columnName);
+            if (0 == given.Count)
+                given.Add(new List<string>());
 
-            if (((IGPALFileInternal)this).FileSettings.FileCount > ((IGPALFileInternal)this).FileSettings.FirstLineIsColumnNames.Count)
-                ((IGPALFileInternal)this).FileSettings.FirstLineIsColumnNames.Add(true);
+            ((List<string>)given[given.Count - 1]).Add(columnName);
+            fileSettings.ApplyUnits();
             return this;
         }
         /// <summary>
-        /// Add column names to the column name list using the .WithDelimiter to separate names.
-        /// Use this to add column headers for multiple filenames.
-        /// NOTE: If more filenames exists than column name lists, the file will have no column header row.
-        /// NOTE: .WithUseHeaderForAllFiles will use the first column name list for all files
+        /// Gives the file names before it a column name list, the names separated by commas. Each list goes to the next of
+        /// those names in order, the last list given covers the rest of them, and a name's list goes to every file it
+        /// added. Given again once each of those names has a list, it replaces the last list, with a warning.
+        /// <see cref="WithUseSameColumnNamesForAllFiles(bool)"/> uses the first column name list for all files
         /// </summary>
         /// <param name="columnNames">A comma-delimited string of column names.</param>
         /// <returns>Fluent interface to define more File settings.</returns>
         public IAllowFileSettings WithColumnNames(string columnNames)
         {
-            if (((IGPALFileInternal)this).FileSettings.FileCount > ((IGPALFileInternal)this).FileSettings.ColumnList.Count())
-                ((IGPALFileInternal)this).FileSettings.ColumnList.AddRow(new List<string>());
-            else
-            // we already have columns from .WithColumnName, add a new list for our entries
-            {
-                string oldColumns = string.Join(", ", ((IGPALFileInternal)this).FileSettings.ColumnList[((IGPALFileInternal)this).FileSettings.ColumnList.Count() - 1]);
-                GPAL.PublishSimpleEvent(Enums.GPALEventType.WARNING, $"Overwriting existing column names [{oldColumns}] with new names [{columnNames}]");
-                ((IGPALFileInternal)this).FileSettings.ColumnList.Clear();
-            }
-
-            foreach (string columnName in columnNames.Split(','))
-                ((IGPALFileInternal)this).FileSettings.ColumnList[((IGPALFileInternal)this).FileSettings.ColumnList.Count() - 1].Add(columnName.Trim());
-
-            // alway ensure we have a new empty list waiting to add columns too.
-
-            if (((IGPALFileInternal)this).FileSettings.FileCount > ((IGPALFileInternal)this).FileSettings.FirstLineIsColumnNames.Count)
-                ((IGPALFileInternal)this).FileSettings.FirstLineIsColumnNames.Add(true);
-
+            GiveColumnNames(columnNames.Split(',').Select(columnName => columnName.Trim()).ToList());
             return this;
         }
         /// <summary>
-        /// Add column names to the column name list using the .WithDelimiter to separate names.
-        /// Use this to add column headers for multiple filenames.
-        /// NOTE: If more filenames exists than column name lists, the file will have no column header row.
-        /// NOTE: .WithUseHeaderForAllFiles will use the first column name list for all files
+        /// Gives the file names before it a column name list. Each list goes to the next of those names in order, the
+        /// last list given covers the rest of them, and a name's list goes to every file it added. Given again once each
+        /// of those names has a list, it replaces the last list, with a warning.
+        /// <see cref="WithUseSameColumnNamesForAllFiles(bool)"/> uses the first column name list for all files
         /// </summary>
         /// <param name="columnNames">One column name per array element.</param>
         /// <returns>Fluent interface to define more File settings.</returns>
         public IAllowFileSettings WithColumnNames(string[] columnNames)
         {
-            // we already have columns from .WithCOlumnName, add a new list for our entries
-            if (((IGPALFileInternal)this).FileSettings.FileCount > ((IGPALFileInternal)this).FileSettings.ColumnList.Count())
-                ((IGPALFileInternal)this).FileSettings.ColumnList.AddRow(new List<string>());
-
-            foreach (string columnName in columnNames)
-                ((IGPALFileInternal)this).FileSettings.ColumnList[((IGPALFileInternal)this).FileSettings.ColumnList.Count() - 1].Add(columnName);
-
-            if (((IGPALFileInternal)this).FileSettings.FileCount > ((IGPALFileInternal)this).FileSettings.FirstLineIsColumnNames.Count)
-                ((IGPALFileInternal)this).FileSettings.FirstLineIsColumnNames.Add(true);
-
+            GiveColumnNames(new List<string>(columnNames));
             return this;
         }
         #endregion <Fluent Interface>
@@ -416,15 +472,15 @@ namespace GenerallyPositive
                         // ReturnFilenames lists every file written, uniquified or not.
                         ((IGPALFileInternal)this).FileSettings.ReturnFilenames.Add(fullPath);
                         ((IGPALFileInternal)this).FileSettings.NextFileCount++;
-                        return fullPath;
+                        return WithSettingsOf(fullPath, ((IGPALFileInternal)this).FileSettings.NextFileCount - 1);
                     }
-                    else    // we are out of user defined files but they keep calling Next past user supplied filenames, so generate a new filename using the last user supplied entry as a pattern, can call next to keep getting a new filename
+                    else    // Next called past the user supplied filenames: generate a new filename from the last one supplied, on every call
                     {
                         fullPath = FileHelper.CleanUpFileDestination(((IGPALFileInternal)this).FileSettings.Filenames[((IGPALFileInternal)this).FileSettings.NextFileCount-1], out newFilename, DeleteFileBeforeDownload: false, nextPattern, ref patternCounter);
                         ((IGPALFileInternal)this).FileSettings.NextPatternCounter = patternCounter;
                         ((IGPALFileInternal)this).FileSettings.ReturnFilenames.Add(fullPath);
                         //((IGPALFileInternal)this).FileSettings.NextFileCount++;
-                        return fullPath;
+                        return WithSettingsOf(fullPath, ((IGPALFileInternal)this).FileSettings.NextFileCount - 1);
                     }
                 }
                 // do the same but respect the overwrite flag settings
@@ -434,7 +490,7 @@ namespace GenerallyPositive
                     {
                         fullPath = FileHelper.CleanUpFileDestination(((IGPALFileInternal)this).FileSettings.Filenames[((IGPALFileInternal)this).FileSettings.NextFileCount++], out newFilename, DeleteFileBeforeDownload: true);
                         ((IGPALFileInternal)this).FileSettings.ReturnFilenames.Add(fullPath);
-                        return fullPath;
+                        return WithSettingsOf(fullPath, ((IGPALFileInternal)this).FileSettings.NextFileCount - 1);
                     }
                     // a remaining user-supplied filename takes priority over generating a new one
                     else if (((IGPALFileInternal)this).FileSettings.NextFileCount < ((IGPALFileInternal)this).FileSettings.FileCount)
@@ -444,7 +500,7 @@ namespace GenerallyPositive
                         // ReturnFilenames lists every file written, uniquified or not.
                         ((IGPALFileInternal)this).FileSettings.ReturnFilenames.Add(fullPath);
                         ((IGPALFileInternal)this).FileSettings.NextFileCount++;
-                        return fullPath;
+                        return WithSettingsOf(fullPath, ((IGPALFileInternal)this).FileSettings.NextFileCount - 1);
                     }
                 }
 
@@ -456,8 +512,35 @@ namespace GenerallyPositive
                 ((IGPALFileInternal)this).FileSettings.NextPatternCounter = patternCounter;
                 ((IGPALFileInternal)this).FileSettings.ReturnFilenames.Add(fullPath);
                 //((IGPALFileInternal)this).FileSettings.NextFileCount++;
-                return fullPath;
+                return WithSettingsOf(fullPath, patternIdx);
             }
+        }
+        /// <summary>
+        /// The file <see cref="Next"/> returns: the filename it worked out, with the delimiter, quoting, header line and
+        /// column names given for the filename it came from, so a file reached through Next is written and read as that
+        /// file is.
+        /// </summary>
+        /// <param name="nextFilename">The filename Next worked out</param>
+        /// <param name="fileIdx">The place in <see cref="Filenames"/> of the filename it came from</param>
+        /// <returns>The file for the filename, with that file's settings</returns>
+        private GPALFile WithSettingsOf(string nextFilename, int fileIdx)
+        {
+            GPALFileSettings settings = ((IGPALFileInternal)this).FileSettings;
+            GPALFile nextFile = nextFilename;
+
+            // a list holds an entry for each file only when one of its files was given that setting
+            if (fileIdx < settings.Delimiter.Count && true == settings.Delimiter[fileIdx].HasValue)
+                nextFile.WithDelimiter(settings.Delimiter[fileIdx].Value);
+            if (fileIdx < settings.FieldsEnclosedInQuotes.Count && true == settings.FieldsEnclosedInQuotes[fileIdx])
+                nextFile.WithColumnsEnclosedInQuotes(true);
+            if (fileIdx < settings.IgnoreFirstLineColumnNames.Count && true == settings.IgnoreFirstLineColumnNames[fileIdx])
+                nextFile.WithIgnoreFirstLineColumnNames(true);
+            if (fileIdx < settings.ColumnList.Count() && 0 < settings.ColumnList[fileIdx].Count)
+                nextFile.WithColumnNames(settings.ColumnList[fileIdx].ToArray());
+            if (fileIdx < settings.FirstLineGiven.Count && true == settings.FirstLineGiven[fileIdx])
+                nextFile.WithFirstLineIsColumnNames(settings.FirstLineIsColumnNames[fileIdx]);
+
+            return nextFile;
         }
         /// <summary>
         /// We have only one file, accessing it
@@ -772,6 +855,179 @@ namespace GenerallyPositive
             }
         }
         /// <summary>
+        /// Saves the files as an archive, the destination's extension saying which: a zip (.zip, and the other names in
+        /// zipExtensions in gpal.yaml such as .xpi and .jar), a gz (.gz, and those in gzExtensions), a .tar, or a .tar.gz
+        /// or .tgz, or a .7z. A rar can be opened but not written.<br/>
+        /// A folder goes in whole with its subfolders, its contents at the top of the archive.<br/>
+        /// A named destination is one target: reports.zip holds every file. A .gz holds only one file, so reports.csv.gz
+        /// is the first and the rest are numbered from it, reports_0001.csv.gz and on, with the
+        /// <see cref="WithNextFilePattern"/> counter pattern; a date or time pattern would repeat a name, so it counts. A
+        /// folder cannot go in a .gz.<br/>
+        /// A wildcard keeps each one's own name, as copy does: *.gz makes a.csv.gz, b.csv.gz, and *.zip a zip per file or
+        /// folder.<br/>
+        /// With no folder the result goes beside the source; for a file taken out of an archive, beside that archive.<br/>
+        /// <see cref="WithOverwriteFile(bool)"/> true replaces what is there; false, or not set, takes the next free
+        /// name. Every file written is added to <see cref="ReturnFilenames"/>.
+        /// </summary>
+        /// <example>
+        /// <code>
+        ///     ((GPALFile)GPAL.File.WithFileName(@"C:\reports\*.csv")).SaveTo(@"C:\out\reports.zip");
+        ///     ((GPALFile)GPAL.File.WithFileName(@"C:\source\extension\")).SaveTo(@"C:\out\extension.xpi");
+        ///     ((GPALFile)GPAL.File.WithFileName(@"C:\work\export.7z\*.csv")).SaveTo("*.gz");
+        /// </code>
+        /// </example>
+        /// <param name="destination">An archive name, or *.zip, *.gz and the like to keep each one's name</param>
+        /// <returns>Fluent interface to act on the same files again</returns>
+        public IAllowFileActions SaveTo(string destination)
+        {
+            GPALFileSettings settings = ((IGPALFileInternal)this).FileSettings;
+            List<string> files = settings.Filenames;
+            string name = Path.GetFileName(destination);
+            string folder = Path.GetDirectoryName(destination);
+            string format = FileHelper.ArchiveFormat(name);
+            bool eachFile = name.Contains('*');
+
+            // what a wildcard adds to each name: *.gz adds .gz, *.tar.gz adds .tar.gz
+            string suffix = true == eachFile ? name.Substring(name.IndexOf('*') + 1) : string.Empty;
+
+            if (null == format)
+                GPAL.PublishSimpleEvent(Enums.GPALEventType.ERROR, $"[{destination}] is not an archive GPAL writes (zip, gz, tar, tar.gz or 7z), so nothing was saved. CopyTo copies files as they are.", this, Enums.GPALObjectType.GPALFile);
+            else if (".rar" == format)
+                GPAL.PublishSimpleEvent(Enums.GPALEventType.ERROR, $"[{destination}] is a rar, which GPAL opens but does not write, so nothing was saved. Save it as .zip, .7z or .tar.gz.", this, Enums.GPALObjectType.GPALFile);
+            else if (0 == files.Count)
+                GPAL.PublishSimpleEvent(Enums.GPALEventType.WARNING, $"No files to save to [{destination}].", this, Enums.GPALObjectType.GPALFile);
+            else if (".gz" != format && false == eachFile)
+            {
+                // one archive holding everything, so one overwrite flag, the first
+                bool overwrite = 0 < settings.OverwriteFile.Count && true == settings.OverwriteFile[0];
+                string target = Path.Combine(FolderFor(files[0], folder), name);
+                string requested = target;
+
+                try
+                {
+                    if (false == overwrite)
+                    {
+                        int patternCounter = settings.NextPatternCounter;
+                        target = FileHelper.CleanUpFileDestination(target, out _, false, settings.NextFilePattern, ref patternCounter);
+                        settings.NextPatternCounter = patternCounter;
+                    }
+
+                    // a folder saved into itself leaves out this archive and the ones earlier runs numbered from it
+                    List<(string file, string entry)> entries = FileHelper.ArchiveEntries(files, requested);
+
+                    // replacing a file the archive is made from would empty it before it is read
+                    if (true == entries.Any(item => true == SamePath(item.file, target)))
+                        GPAL.PublishSimpleEvent(Enums.GPALEventType.ERROR, $"[{target}] is one of the files being saved, so nothing was saved.", this, Enums.GPALObjectType.GPALFile);
+                    else
+                    {
+                        // an archive a failed read damaged is removed, so it is not returned
+                        FileHelper.WriteArchive(entries, target, format);
+                        if (true == File.Exists(target))
+                            settings.ReturnFilenames.Add(target);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    GPAL.PublishSimpleEvent(Enums.GPALEventType.EXCEPTION, $"Unable to save to [{target}].", this, Enums.GPALObjectType.GPALFile, ex);
+                }
+            }
+            else
+            {
+                // numbers the named .gz files after the first when overwriting, so the same names are replaced every run
+                int overwriteCounter = 0;
+
+                for (int index = 0; index < files.Count; index++)
+                {
+                    string source = files[index];
+                    string sourceName = Path.GetFileName(source.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+
+                    // A wildcard makes one target per file, so each takes its own flag, as CopyTo does. A name is one
+                    // target, so the first flag
+                    int flagIndex = true == eachFile ? index : 0;
+                    bool overwrite = flagIndex < settings.OverwriteFile.Count && true == settings.OverwriteFile[flagIndex];
+                    string target = true == eachFile
+                                  ? Path.Combine(FolderFor(source, folder), sourceName + suffix)
+                                  : Path.Combine(FolderFor(files[0], folder), name);
+                    string requested = target;
+
+                    // The files after the first in a named .gz are numbered. A date or time pattern would give several files
+                    // the same name, each replacing the one before, so they take the padded counter instead
+                    Enums.NextFilePattern pattern = false == eachFile && 0 < index
+                                                  && Enums.NextFilePattern.Counter != settings.NextFilePattern
+                                                  && Enums.NextFilePattern.CounterPadded != settings.NextFilePattern
+                                                  ? Enums.NextFilePattern.CounterPadded
+                                                  : settings.NextFilePattern;
+
+                    try
+                    {
+                        if (true == overwrite && false == eachFile && 0 < index)
+                        {
+                            string baseName = FileHelper.NameWithoutExtension(target, out string fullExtension);
+                            target = Path.Combine(Path.GetDirectoryName(target), baseName + FileHelper.NextFileSuffix(pattern, ref overwriteCounter) + fullExtension);
+                        }
+                        else if (false == overwrite)
+                        {
+                            // a name already taken, by an earlier run or the file before this one, becomes the next free one
+                            int patternCounter = settings.NextPatternCounter;
+                            target = FileHelper.CleanUpFileDestination(target, out _, false, pattern, ref patternCounter);
+                            settings.NextPatternCounter = patternCounter;
+                        }
+
+                        // a folder saved into itself leaves out this archive and its earlier numbered ones
+                        List<(string file, string entry)> entries = FileHelper.ArchiveEntries(new List<string> { source }, requested);
+
+                        // Replacing a source would empty it before it is read. A wildcard target is made from this source
+                        // alone, so only it can be hit; a named target can be any of them
+                        if (".gz" == format && true == Directory.Exists(source))
+                            GPAL.PublishSimpleEvent(Enums.GPALEventType.ERROR, $"[{source}] is a folder and a gz holds one file, so it was not saved. Save a folder as .zip, .7z or .tar.gz.", this, Enums.GPALObjectType.GPALFile);
+                        else if (true == (true == eachFile ? entries.Select(item => item.file).ToList() : files).Any(file => true == SamePath(file, target)))
+                            GPAL.PublishSimpleEvent(Enums.GPALEventType.ERROR, $"[{target}] is one of the files being saved, so [{source}] was not saved over it.", this, Enums.GPALObjectType.GPALFile);
+                        else
+                        {
+                            if (".gz" == format)
+                                FileHelper.WriteGz(source, target);
+                            else
+                                FileHelper.WriteArchive(entries, target, format);
+
+                            // an archive a failed read damaged is removed, so it is not returned
+                            if (true == File.Exists(target))
+                                settings.ReturnFilenames.Add(target);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        GPAL.PublishSimpleEvent(Enums.GPALEventType.EXCEPTION, $"Unable to save [{source}] to [{target}].", this, Enums.GPALObjectType.GPALFile, ex);
+                    }
+                }
+            }
+
+            return this;
+        }
+        /// <summary>
+        /// True when two paths name the same file.
+        /// </summary>
+        /// <param name="first">One path</param>
+        /// <param name="second">The other</param>
+        /// <returns>True when they are the same file</returns>
+        private static bool SamePath(string first, string second)
+        {
+            return string.Equals(Path.GetFullPath(first), Path.GetFullPath(second), StringComparison.OrdinalIgnoreCase);
+        }
+        /// <summary>
+        /// The folder SaveTo writes into: the one the destination named, or with none, the source's own folder, a
+        /// folder's being the one it sits in. A file taken out of an archive counts the archive as its source, since its
+        /// own folder is GPAL's temp directory.
+        /// </summary>
+        /// <param name="file">The source file or folder</param>
+        /// <param name="folder">The destination's folder, empty when it named none</param>
+        /// <returns>The folder to write into</returns>
+        private string FolderFor(string file, string folder)
+        {
+            string source = ((IGPALFileInternal)this).FileSettings.ExtractedFrom.TryGetValue(file, out string archive) ? archive : file;
+
+            return true == string.IsNullOrEmpty(folder) ? Path.GetDirectoryName(source.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)) : folder;
+        }
+        /// <summary>
         /// Moves each file in <see cref="Filenames"/> to <paramref name="destination"/>. If
         /// <paramref name="destination"/> is a directory (per <see cref="IsDirectoryOnly(string)"/>),
         /// each matched file is moved into that directory under its own name; otherwise all matched
@@ -924,6 +1180,13 @@ namespace GenerallyPositive
                 FieldsEnclosedInQuotes = new List<bool>(thisInternal.FileSettings.FieldsEnclosedInQuotes),
                 FirstLineIsColumnNames = new List<bool>(thisInternal.FileSettings.FirstLineIsColumnNames),
                 IgnoreFirstLineColumnNames = new List<bool>(thisInternal.FileSettings.IgnoreFirstLineColumnNames),
+                FirstLineGiven = new List<bool>(thisInternal.FileSettings.FirstLineGiven),
+                FilesPerName = new List<int>(thisInternal.FileSettings.FilesPerName),
+                UnitOfName = new List<int>(thisInternal.FileSettings.UnitOfName),
+                PlaceOfName = new List<int>(thisInternal.FileSettings.PlaceOfName),
+                SettingSinceLastName = thisInternal.FileSettings.SettingSinceLastName,
+                Units = thisInternal.FileSettings.Units.Select(unit => unit.ToDictionary(kind => kind.Key,
+                    kind => kind.Value.Select(setting => setting is List<string> columns ? new List<string>(columns) : setting).ToList())).ToList(),
                 UseOneHeaderForAllFiles = thisInternal.FileSettings.UseOneHeaderForAllFiles,
                 TokenList = thisInternal.FileSettings.TokenList != null ? new List<IGPALGrid<string>>(thisInternal.FileSettings.TokenList) : null,
                 FileData = thisInternal.FileSettings.FileData != null ? new List<string>(thisInternal.FileSettings.FileData) : null,

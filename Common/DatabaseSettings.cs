@@ -17,7 +17,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Data.SqlClient;
+using Microsoft.Data.SqlClient;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -46,9 +46,10 @@ namespace GenerallyPositive
         public List<DatabaseColumn> ColumnList { get; set; }
         public List<string> ParameterNamesList { get; set; }
         public List<string> ParametersList { get; set; }
-        public IGPALGrid<string> ParametersGrid { get; set; }
+        public IGPALGrid<string> ParametersGrid { get; set; }   // the grid from .Using or .WithParameterGrid; null when none was given
+        internal DateTime? ParametersUsedAt { get; set; }   // when an action last ran with the parameters; null until one does
         public GPALDatabase.DatabaseError LastError { get; set; }   // null until something fails
-        public IGPALGrid<string> Tokens { get; set; }   // rows and columns of data to enter into text fields, CAVEAT: possibly something other than text? an image?
+        public IGPALGrid<string> Tokens { get; set; }   // rows and columns of data to enter into text fields
         public List<int> LastGridRowCountsPerTable { get; set; }   // set by SaveTo(out IGPALGrid<string>); read back by the optional GetRowCount() chained call
         public int RowCount { get; set; } = -1;
         public int CommandTimeoutSeconds { get; set; } = -1;   // -1 leaves the provider's own default alone
@@ -126,7 +127,6 @@ namespace GenerallyPositive
             ColumnList = new List<DatabaseColumn>();
             ParameterNamesList = new List<string>();
             ParametersList = new List<string>();
-            ParametersGrid = GPAL.Grid.ToGPALObject();
             Tokens = GPAL.Grid.ToGPALObject();
             Database = database;
         }

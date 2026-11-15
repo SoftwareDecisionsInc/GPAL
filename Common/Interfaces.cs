@@ -143,7 +143,7 @@ namespace GenerallyPositive
         IAllowSelectorSettings CallIfFound(Browser.Browser.CallIfDelegate CallIfFound);
         [Callback(Description = "Selector based callback if this selector is NOT found")]
         IAllowSelectorSettings CallIfNotFound(Browser.Browser.CallIfDelegate CallIfNotFound);
-        // TODO: might we want to have an element called directly after it is filled in rather than the whole row? NOT YET
+        // A CallAfterFillIn per selector is not offered; the unit of work's CallAfterFillIn is the only one
         // IAllowAfterAnySelector CallAfterFillIn(Browser.Browser.CallAfterFillInDelegate CallAfterFillIn);
     }
 
@@ -170,6 +170,8 @@ namespace GenerallyPositive
         IAllowGPALSettings WithExceptionHandlerEvents(GPALEventType eventTypes);
         [Settings(Description = "Which GPAL events reach the form control. [all (default)]")]
         IAllowGPALSettings WithControlEvents(GPALEventType eventTypes);
+        [GPALSettings(Description = "Set the default timeout for waiting for a download to start.")]
+        IAllowGPALSettings WithDownloadTimeoutInSec([Seconds] int seconds);
         [GPALSettings(Description = "Print stack track when GPAL prints it's own published messages (PublishToConsole/PublishToDebug == true). [false (default)]")]
         IAllowGPALSettings WithPublishStackTrace(bool trueFalse = true);
         [GPALSettings(Description = "Callback for failures a workflow can decide about, used by any browser without its own CallOnFail")]
@@ -196,9 +198,9 @@ namespace GenerallyPositive
         IAllowGPALSettings WithTempProfileParentDirectory([Directory(Description = "Global location for temp profiles. [c:\\profiles (default)(saved in GPAL.yaml that is loaded on startup)]")] string tempProfileDirectory);
         [GPALSettings(Description = "Substitue string when data cannot be retrieved for an element [##UNABLE TO GET## (default)]")]
         IAllowGPALSettings WithDefaultErrorPlaceholder(string message = "##UNABLE TO GET##");
-        [GPALSettings(Description = "Automatically update the Chrome webdriver when running a GPAL application. Manually deploy first Chrome driver, tho.")]
+        [GPALSettings(Description = "The automation engine for every browser that does not name its own [PuppeteerPort (default)]")]
         IAllowGPALSettings WithAutomationEngine(AutomationEngine automationEngine = AutomationEngine.PuppeteerPort);
-        [GPALSettings(Description = "Automatically update the Chrome webdriver when running a GPAL application. Manually deploy first Chrome driver, tho.")]
+        [GPALSettings(Description = "Keep the Chrome, Edge or Firefox web driver matching the browser, downloading it when the browser has moved on. Checked when the first browser launches, whatever its automation engine")]
         IAllowGPALSettings WithAutoUpdateWebDriver(bool trueFalse = true);
         [GPALSettings(Description = "Do not try alternate methods to interact with an element if an error occurs.")]
         IAllowGPALSettings WithNoFallbackActions(bool trueFalse = true);
@@ -238,6 +240,8 @@ namespace GenerallyPositive
     }
     public interface IAllowClipboardInto
     {
+        [Settings(Description = "Name of the file LeftClickAndUpload or LeftClickAndOpen writes the clipboard to. A bare name goes in GPAL's temp folder.")]
+        IAllowClipboardInto WithFilename(string filename);
         [Action(Description = "What is on the clipboard, as text")]
         IGPALClipboard SaveTo(out string text);
         [Action(Description = "What is on the clipboard, split into a grid")]
@@ -439,7 +443,7 @@ namespace GenerallyPositive
         IAllowCredentialsPassword WithUsername(string username);
 
         // Alternative to WithUsername/WithPassword/etc: supply the login (master) credentials for the
-        // credential service itself (e.g. your Bitwarden/LastPass account), previously built with
+        // credential service itself (e.g. your Bitwarden/LastPass account), built with
         // GPAL.CredentialsFor(CredentialServiceType.None).WithUsername(...).WithPassword(...).
 
         // Static API key - supply the key directly, from an env variable, or from an internal REST endpoint:
@@ -746,6 +750,8 @@ namespace GenerallyPositive
         void CopyTo(string destination);
         [Action(Description = "Move the defined GPALFile(s) to a destination file or directory")]
         void MoveTo(string destination);
+        [Action(Description = "Save the defined GPALFile(s) as an archive: zip (and .xpi, .jar...), gz, tar, tar.gz or 7z, by the extension. A folder goes in whole. A name is one target (several files to .gz are numbered from it); *.zip or *.gz makes one per file keeping its name. No folder saves beside the source.")]
+        IAllowFileActions SaveTo(string destination);
         [Action(Description = "Delete the destination file or files (wildcard) or all in the directory (no filename)")]
         void Delete(string destination);
         [Action(Description = "Delete the defined GPALFile underlying file(s)")]
@@ -754,11 +760,27 @@ namespace GenerallyPositive
     public interface IAllowFileName : IAllowToGPALObject<GPALFile>
     {
         [Settings(Description = "Add a filename to the GPALFile list. Actual output filenames added to end.")]
-        IAllowFileSettings WithFileName([FilePath] string filename);   // a wildcard pattern expands to the matching files; an http/https url is fetched to a local file and used from there
+        IAllowFileSettings WithFileName([FilePath] string filename);   // a wildcard pattern expands to the matching files; an http/https url is fetched to a local file and used from there; a zip, gz, 7z, rar or tar in the path opens like a folder (export.zip\*.csv)
         [Settings(Description = "A browser already holding the session a url needs. Set before .WithFileName. The file is fetched inside the page, or downloaded in a new tab if the page cannot return it.")]
         IAllowFileSettings WithBrowser(Browser.IBrowser browser);
     }
     #endregion <File Interfaces>
+    #region <Notify Interfaces>
+    public interface IGPALNotify : IAllowNotifyActions
+    { }
+    public interface IAllowNotifyWebhook : IAllowToGPALObject<IGPALNotify>
+    {
+        [Settings(Description = "A webhook held in GPAL.Credentials as a StaticKey's key (WithServiceKey, WithKeyFromEnv, WithKeyFromApi). The address says which service it is. Add several to send to each")]
+        IAllowNotifyActions WithWebhook(ICredentials webhook);
+        [Settings(Description = "A webhook by its address: Slack, Teams, Discord, Google Chat, Telegram, ntfy or any that takes {\"text\": ...}. The address is the credential, so prefer the ICredentials overload")]
+        IAllowNotifyActions WithWebhook([URL] string webhookUrl);
+    }
+    public interface IAllowNotifyActions : IAllowNotifyWebhook
+    {
+        [Action(Description = "Posts the message to every webhook added, shaped for each one's service")]
+        IAllowNotifyActions Send(string message);
+    }
+    #endregion <Notify Interfaces>
     #region Grid
     public interface IGPALGrid<T> : IAllowGridActions<T>, IEnumerable<List<T>> // , ICloneable
     {
@@ -1043,7 +1065,6 @@ namespace GenerallyPositive
     }
     #endregion Excel
     #region Launcher
-    // written by Grok
     public interface IAllowExecutableSetup : IAllowToGPALObject<Launcher>
     {
         [Settings(Description = "The executable to run, or a url or document to open with whatever is registered for it")]
@@ -1084,7 +1105,6 @@ namespace GenerallyPositive
     }
     #endregion Launcher
     #region REST
-    // generated by grok
     public interface IAllowRESTEndpoint
     {
         [Settings(Description = "Sets the API base URL with download path", Submenu = "Request")]

@@ -64,7 +64,7 @@ public class NullableBigIntegerYamlConverter : IYamlTypeConverter
         if (value == null)
             emitter.Emit(new Scalar("null"));
         else
-            serializer(((BigInteger)value).ToString(), typeof(string));
+            emitter.Emit(new Scalar(null, null, ((BigInteger)value).ToString()));   // a number, written plain, so it reads back as a number
     }
 
 }

@@ -201,10 +201,6 @@ namespace GenerallyPositive.Browser
         }
 
 
-        // reddit consent banner - test to see if injecting this works
-        // "Your request has been blocked by network security. Please try to login with your Reddit account."
-        // https://www.reddit.com/r/firefox/comments/1mqmsv5/your_request_has_been_blocked_by_network_security/
-
         // Preferences GPAL sets on a supplied profile, by Chrome name, shared by apply and restore.
         // Do not add session.restore_on_startup: Chromium guards it with an HMAC in Secure Preferences, and writing
         // it from outside makes Chromium reset it and much of the file. Session restore is stopped by

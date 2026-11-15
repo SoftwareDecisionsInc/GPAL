@@ -485,7 +485,7 @@ namespace GenerallyPositive
         /// <remarks>
         /// With Shift held, mixed case text is not sent all caps.
         /// </remarks>
-        // CAVEAT: if SHIFT modifier is used with a mixed case string, sendchar will unshift and the whole string will not be sent in all caps.
+        // CAVEAT: SendChar releases Shift after each uppercase character, so with Shift held, mixed case text is not sent all caps.
         public static void SendString(string stringToSend, int delayMs = 0)
         {
             bool first = true;
@@ -775,11 +775,6 @@ namespace GenerallyPositive
                 byte[] keyState = new byte[256];
                 if (GetKeyboardState(keyState) == 0)
                     return string.Empty;
-
-                // Adjust keyboard state based on your application's maintained state
-                // Example: If Shift is "held" in your state, set VK_SHIFT (0x10)
-                // keyState[0x10] = 0x80; // Uncomment to simulate Shift pressed
-                // keyState[0x14] = 0x80; // Uncomment to simulate Caps Lock toggled
 
                 // Buffer for output character
                 StringBuilder charBuffer = new StringBuilder(2);

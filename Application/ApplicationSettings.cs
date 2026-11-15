@@ -36,13 +36,13 @@ namespace GenerallyPositive.Application
         internal string Name { get; set;  }  = null;
 
         internal Process Process { get; set; } = null;
-        // load images on a web page?
+        // whether to load images on a web page
         internal bool LoadImages { get; set; } = false;
 
-        // open pdf documents in external program?
+        // whether to open pdf documents in an external program
         internal bool OpenPDFExternally { get; set; } = true;
         
-        // open file save dialog
+        // whether to open the file save dialog
         internal bool PromptForDownload { get; set; } = true;
 
         internal string PlatformName { get; set; } = "Windows 10";

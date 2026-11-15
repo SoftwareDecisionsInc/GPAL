@@ -124,8 +124,7 @@ namespace GenerallyPositive
         /// <returns>The raw response</returns>
         private string Send(string apiBase, string endpoint, string accessToken, Dictionary<string, object> body)
         {
-            // NOTE: WithEndpoint() resets the client's headers, so headers must be added
-            // after WithAPIBase/WithEndpoint, not before.
+            // CAVEAT: WithEndpoint() resets the client's headers, so headers are added after WithAPIBase/WithEndpoint.
             var requestBuilder = (IAllowRESTParametersOrExecution)_restClient
                 .WithAPIBase(apiBase, System.Threading.Timeout.InfiniteTimeSpan)
                 .WithEndpoint(endpoint);

@@ -96,10 +96,11 @@ namespace GenerallyPositive.GPALForm
 
                         while (false == textFilled && elementIdx < myForm.ControlList.Count)
                         {
+                            // a read-only box takes no token, as a person cannot type into one
                             switch (myForm.ControlList[elementIdx].ControlType)
                             {
-                                case FormControlType.TextArea:
-                                case FormControlType.Input:
+                                case FormControlType.TextArea when false == myForm.ControlList[elementIdx].IsReadOnly:
+                                case FormControlType.Input when false == myForm.ControlList[elementIdx].IsReadOnly:
                                     myForm.Form.SwitchToTab(myForm.ControlList[elementIdx]);    // bring the control's tab into view so the change is visible as it happens
                                     FillInFrom(myForm.ControlList[elementIdx], token, writeMode);
                                     textFilled = true;
@@ -111,18 +112,18 @@ namespace GenerallyPositive.GPALForm
                             elementIdx++;
                         }
 
-                        // detect if we have too many tokens to consume and publish an information event [entirely possible this scenario is fine]
+                        // more tokens than controls: warn about the unused ones
                         if (elementIdx == myForm.ControlList.Count && false == textFilled)
                             GPAL.PublishSimpleEvent(GPALEventType.WARNING, $"Unused token: [{token}]", myForm, GPALObjectType.GPALForm);
                     }
 
-                    // detect if we do not have enough tokens for all the form fields [entirely possible this scenario is fine]
+                    // fewer tokens than controls: warn about each control left without one
                     while (elementIdx < myForm.ControlList.Count)
                     {
                         switch (myForm.ControlList[elementIdx].ControlType)
                         {
-                            case FormControlType.TextArea:
-                            case FormControlType.Input:
+                            case FormControlType.TextArea when false == myForm.ControlList[elementIdx].IsReadOnly:
+                            case FormControlType.Input when false == myForm.ControlList[elementIdx].IsReadOnly:
                                 GPAL.PublishSimpleEvent(GPALEventType.WARNING, $"No token for control: [{myForm.ControlList[elementIdx].Name}]", myForm, GPALObjectType.GPALForm);
                                 break;
 
@@ -355,7 +356,7 @@ namespace GenerallyPositive.GPALForm
             return true == accept && true == typing;
         }
 
-        // the class every Open, Save As and folder picker has carried since Windows 3
+        // the window class of every Open, Save As and folder picker dialog
         private const string COMMON_DIALOG_CLASS = "#32770";
 
         // IDOK, the accept button on any dialog that has one

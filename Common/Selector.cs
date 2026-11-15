@@ -19,6 +19,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using OpenQA.Selenium;
 using static GenerallyPositive.Enums;
@@ -29,15 +30,6 @@ using GenerallyPositive.Application;
 using System.Reflection;
 using static GenerallyPositive.SelectorSettings;
 
-/*
-    var searchSelector = GPAL.Selector
-	    .WithCSS(string)    // class
-        .WithXpath(string)  // id / name
-        .WithText(string)   // value
-        .WithImage(string)  // image path or image ptr?
-        .WithOffset(coor)   // for clicking x,y coord
-        .EvaluationOrder(enum)	// order to try finding object
-*/
 namespace GenerallyPositive
 {
     internal class SmallSelectorNode
@@ -121,7 +113,7 @@ namespace GenerallyPositive
             if (true == string.IsNullOrEmpty(selector.Name))
                 Name = $"Selector{browser.CurrentUOW.WithSelectorList.Count}";
             else
-                Name = selector.Name;   // shoulda been copied?
+                Name = selector.Name;
 
             ElementsFoundAndMatchedCount = 0;
         }
@@ -141,7 +133,7 @@ namespace GenerallyPositive
             if (true == string.IsNullOrEmpty(selector.Name))
                 Name = $"Selector{application.CurrentUOW.WithSelectorList.Count}";
             else
-                Name = selector.Name;   // shoulda been copied?
+                Name = selector.Name;
 
             ElementsFoundAndMatchedCount = 0;
         }
@@ -297,7 +289,6 @@ namespace GenerallyPositive
         /// </summary>
         /// <param name="searchForElement">True to search for the element/image<br/>False to just look on the current page.</param>
         /// <returns>Fluent interface to define the selector more</returns>
-        [SingleUse(Description = "Search inside the element this selector already found rather than the whole page")]
         public IAllowSelectorSettings WithSearchForSelector(bool searchForElement)
         {
             SelectorSettings.SearchForSelector = searchForElement;
@@ -309,7 +300,6 @@ namespace GenerallyPositive
         /// </summary>
         /// <param name="name">The selector name</param>
         /// <returns>Fluent interface to define the selector more</returns>
-        [SingleUse(Description = "A name for this selector, used as the column header when its data is saved and in the events it publishes")]
         public IAllowSelectorSettings WithSelectorName(string name)
         {
             SelectorSettings.Name = name;
@@ -320,7 +310,6 @@ namespace GenerallyPositive
         /// </summary>
         /// <param name="deltaX">How far to drag horizontally from where the element was grabbed, in pixels</param>
         /// <returns>Fluent interface to define the selector more</returns>
-        [SingleUse(Description = "How far to drag horizontally from where the element was grabbed, in pixels")]
         public IAllowSelectorSettings WithDeltaX([Pixels] int deltaX)
         {
             SelectorSettings.DeltaX = deltaX;
@@ -331,7 +320,6 @@ namespace GenerallyPositive
         /// </summary>
         /// <param name="deltaY">How far to drag vertically from where the element was grabbed, in pixels</param>
         /// <returns>Fluent interface to define the selector more</returns>
-        [SingleUse(Description = "How far to drag vertically from where the element was grabbed, in pixels")]
         public IAllowSelectorSettings WithDeltaY([Pixels] int deltaY)
         {
             SelectorSettings.DeltaY = deltaY;
@@ -342,7 +330,6 @@ namespace GenerallyPositive
         /// </summary>
         /// <param name="offsetX">X offset</param>
         /// <returns>Fluent interface to define the selector more</returns>
-        [SingleUse(Description = "Where to click inside the element, in pixels right of its left edge. Unset clicks the centre")]
         public IAllowSelectorSettings WithOffsetX([Pixels] int offsetX)
         {
             SelectorSettings.OffsetX = offsetX;
@@ -353,7 +340,6 @@ namespace GenerallyPositive
         /// </summary>
         /// <param name="offsetY">Y offset</param>
         /// <returns>Fluent interface to define the selector more</returns>
-        [SingleUse(Description = "Where to click inside the element, in pixels down from its top edge. Unset clicks the centre")]
         public IAllowSelectorSettings WithOffsetY([Pixels] int offsetY)
         {
             SelectorSettings.OffsetY = offsetY;
@@ -364,7 +350,6 @@ namespace GenerallyPositive
         /// </summary>
         /// <param name="moveWithArc">True to move the mouse to the element.<br/>False [default] jump the mouse to the element.</param>
         /// <returns>Fluent interface to define the selector more</returns>
-        [SingleUse(Description = "Move the pointer to the element along a curve rather than jumping straight there")]
         public IAllowSelectorSettings WithSimulateMouse(bool moveWithArc)
         {
             SelectorSettings.SimulateMouse = moveWithArc;
@@ -372,7 +357,6 @@ namespace GenerallyPositive
             SelectorSettings.RequestedInteractionType = InteractionType.Hardware;
             return this;
         }
-        [SingleUse(Description = "Read this attribute from the element instead of its text when data is retrieved")]
         public IAllowSelectorSettings UseAttribute(string attributeName)
         {
             SelectorSettings.AttributeName = attributeName;
@@ -427,7 +411,7 @@ namespace GenerallyPositive
         /// </summary>
         /// <param name="hrefToMatch">HRef to match</param>
         /// <returns>Fluent interface to define the selector more</returns>
-        public IAllowSelectorSettings MatchHRef(string hrefToMatch)   // image path or actual image?
+        public IAllowSelectorSettings MatchHRef(string hrefToMatch)
         {
             SelectorSettings.MatchCriteriaEntry matchCriteriaEntry = new SelectorSettings.MatchCriteriaEntry { MatchType = MatchType.Href, StringToMatch = hrefToMatch };
             SelectorSettings.MatchCriteria.Add(matchCriteriaEntry);
@@ -438,7 +422,7 @@ namespace GenerallyPositive
         /// </summary>
         /// <param name="hrefToMatch">HRef to match</param>
         /// <returns>Fluent interface to define the selector more</returns>
-        public IAllowSelectorSettings MatchHRefRegex([Regex] string hrefToMatch)   // image path or actual image?
+        public IAllowSelectorSettings MatchHRefRegex([Regex] string hrefToMatch)
         {
             SelectorSettings.MatchCriteriaEntry matchCriteriaEntry = new SelectorSettings.MatchCriteriaEntry { MatchType = MatchType.Regex | MatchType.Href, StringToMatch = hrefToMatch };
             SelectorSettings.MatchCriteria.Add(matchCriteriaEntry);
@@ -449,7 +433,7 @@ namespace GenerallyPositive
         /// </summary>
         /// <param name="placeholderToMatch">Placeholder to match</param>
         /// <returns>Fluent interface to define the selector more</returns>
-        public IAllowSelectorSettings MatchPlaceholder(string placeholderToMatch)   // image path or actual image?
+        public IAllowSelectorSettings MatchPlaceholder(string placeholderToMatch)
         {
             SelectorSettings.MatchCriteriaEntry matchCriteriaEntry = new SelectorSettings.MatchCriteriaEntry { MatchType = MatchType.Placeholder, StringToMatch = placeholderToMatch };
             SelectorSettings.MatchCriteria.Add(matchCriteriaEntry);
@@ -460,7 +444,7 @@ namespace GenerallyPositive
         /// </summary>
         /// <param name="placeholderToMatch"></param>
         /// <returns>Fluent interface to define the selector more</returns>
-        public IAllowSelectorSettings MatchPlaceholderRegex(string placeholderToMatch)   // image path or actual image?
+        public IAllowSelectorSettings MatchPlaceholderRegex(string placeholderToMatch)
         {
             SelectorSettings.MatchCriteriaEntry matchCriteriaEntry = new SelectorSettings.MatchCriteriaEntry { MatchType = MatchType.Regex | MatchType.Placeholder, StringToMatch = placeholderToMatch };
             SelectorSettings.MatchCriteria.Add(matchCriteriaEntry);
@@ -603,7 +587,7 @@ namespace GenerallyPositive
 
         #region <Getter/Setters>
 
-        // TECHNIQUES of dealing with Selector
+        // Interaction techniques for the selector
         /// <summary>
         /// Interact with this element using hardware emulation.
         /// </summary>
@@ -736,7 +720,7 @@ namespace GenerallyPositive
         }
         /// <summary>
         /// Defined method to interact with this element.<br/>
-        /// <b>NOTE:</b> This can be overridden in the workflow.
+        /// A workflow can override it.
         /// </summary>
         /// <returns>Hardware, JavaScript, Selenium</returns>
         public InteractionType InteractionType
@@ -925,7 +909,7 @@ namespace GenerallyPositive
             }
         }
         /// <summary>
-        /// Simulate moving the mouse to interact with this element?
+        /// Whether to move the mouse to this element to interact with it.
         /// </summary>
         /// <returns>True to move the mouse to elements.<br/>False [default] jump the mouse to elements.</returns>
         public bool SimulateMouse
@@ -987,16 +971,16 @@ namespace GenerallyPositive
         public static implicit operator string(Selector sel) => sel.Name;
 
         private static int implicitCount = 0;
-        // ────────────────────────────────────────────────
+        // ------------------------------------------------
         //  1. Implicit conversion from string to Selector
-        // ────────────────────────────────────────────────
+        // ------------------------------------------------
         public static implicit operator Selector(string selectorString)
         {
             var sel = new Selector();
 
             if (string.IsNullOrWhiteSpace(selectorString))
             {
-                // Fail forward: warn + continue with empty/invalid-but-safe selector
+                // Warn and continue with an empty selector
                 GPAL.PublishSimpleEvent(
                     GPALEventType.WARNING,
                     "Invalid selector path treating as empty selector (no paths added).",
@@ -1004,25 +988,18 @@ namespace GenerallyPositive
                     GPALObjectType.Selector
                 );
 
-                // Optional: give it a name so it's obvious in logs/reports
+                // Name it so it shows in logs and reports
                 sel.WithSelectorName($"EmptySelector{implicitCount++}");
             }
             else
             {
                 bool looksLikeXPath = IsLikelyXPath(selectorString);
 
+                // the string is the one kind it reads as
                 if (looksLikeXPath)
-                {
-                    // XPath first - more specific / less false positives in ambiguous cases
                     sel.WithXPath(selectorString);
-                    sel.WithCSS(selectorString);   // still try as CSS as fallback
-                }
                 else
-                {
-                    // CSS first - most people intuitively write CSS selectors
                     sel.WithCSS(selectorString);
-                    sel.WithXPath(selectorString); // still try as XPath fallback
-                }
 
                 // give it a recognizable debug name
                 sel.WithSelectorName($"Implicit{implicitCount++}.{(looksLikeXPath ? "XPath" : "CSS")}.{Shorten(selectorString, 10)}");
@@ -1037,71 +1014,87 @@ namespace GenerallyPositive
             return sel;
         }
 
-        // Very short helper for debug/readable names
+        // Shortens a string for debug names
         private static string Shorten(string s, int maxLen)
         {
             if (s.Length <= maxLen) return s;
             return s.Substring(0, maxLen - 3) + "...";
         }
 
-        // ────────────────────────────────────────────────
-        //  2. The helper that guesses CSS vs XPath
-        // ────────────────────────────────────────────────
+        // ------------------------------------------------
+        //  2. The check that tells CSS from XPath
+        // ------------------------------------------------
+        // a CSS name: letters, digits, - and _, not starting with a digit; E stands for an escaped character
+        private const string CssName = @"-?[_a-zA-Z\u00A0-\uFFFFE][-\w\u00A0-\uFFFFE]*";
+
+        // an XPath axis name ending just before ::
+        private static readonly Regex XPathAxis = new Regex(@"(ancestor|ancestor-or-self|attribute|child|descendant|descendant-or-self|following|following-sibling|namespace|parent|preceding|preceding-sibling|self)\s*::$");
+
+        // what a CSS bracket holds: [attr], [ns|attr], or [attr=value] with ~= |= ^= $= *= and an i or s flag; Q stands for a quoted value
+        private static readonly Regex CssAttributeTest = new Regex(@"^\s*((" + CssName + @"|\*)?\|)?" + CssName + @"\s*([~|^$*]?=\s*(Q|" + CssName + @")\s*([iIsS]\s*)?)?$");
+
         /// <summary>
-        /// Rudimentary but reasonably effective guess: is this string more likely an XPath than a CSS selector?
+        /// Whether this string is an XPath rather than a CSS selector. It is XPath when it has something CSS cannot
+        /// hold outside a quoted value: a '/', an '@', '..', a leading '(' or './', a lone '.', a function such as
+        /// text() not written as a :pseudo-class, an axis such as child::, a bracket that is not a CSS attribute
+        /// test (such as [2] or [last()]), or a '|' joining two paths. Anything else is CSS, including the strings
+        /// both read, such as a bare tag name or input[name='q'].
         /// </summary>
+        /// <param name="s">The selector string</param>
+        /// <returns>True for XPath, false for CSS</returns>
         public static bool IsLikelyXPath(string s)
         {
-            if (string.IsNullOrWhiteSpace(s)) return false;
-            s = s.Trim();
+            bool xpath = false;
 
-            // Strong XPath starters (absolute, descendant-or-self, id function)
-            if (s.StartsWith("/") || s.StartsWith(".//") || s.StartsWith("//") || s.StartsWith("id("))
-                return true;
-
-            // Classic browser-copied XPath: html/body/div[NN]/... pattern
-            if (char.IsLetter(s[0]) && s.Contains("/") && s.Contains("["))
-                return true;
-
-            // XPath-specific constructs that almost never appear in CSS
-            if (s.Contains("::") ||
-                s.Contains("/following") ||
-                s.Contains("/preceding") ||
-                s.Contains("/ancestor") ||
-                s.Contains("/parent") ||
-                s.Contains("/child") ||
-                s.Contains("position()") ||
-                s.Contains("last()") ||
-                s.Contains("normalize-space") ||
-                s.Contains("contains(text()") ||
-                (s.Contains("@") && s.Contains("=") && !s.Contains("[")))   // @attr="value" without [
+            if (false == string.IsNullOrWhiteSpace(s))
             {
-                return true;
+                // quoted text is a value, not syntax, so each quoted value becomes Q and each escaped character E
+                StringBuilder syntax = new StringBuilder();
+                char quote = '\0';
+                for (int i = 0; i < s.Length; i++)
+                {
+                    char ch = s[i];
+                    if ('\0' != quote)
+                    {
+                        // a backslash in a CSS value escapes the next character, a quote included
+                        if ('\\' == ch)
+                            i++;
+                        else if (ch == quote)
+                        {
+                            quote = '\0';
+                            syntax.Append('Q');
+                        }
+                    }
+                    else if ('\\' == ch)
+                    {
+                        syntax.Append('E');
+                        i++;
+                    }
+                    else if ('\'' == ch || '"' == ch)
+                        quote = ch;
+                    else
+                        syntax.Append(ch);
+                }
+                string text = syntax.ToString().Trim();
+
+                xpath = text.StartsWith("(") || "." == text || text.StartsWith("./") || text.Contains("..")
+                    || text.Contains("/") || text.Contains("@")
+                    || Regex.IsMatch(text, @"(^|[^:\w-])[a-zA-Z][-\w]*\s*\(");   // a function call; CSS has them only after ':'
+
+                // :: after an axis name is XPath; otherwise it is a CSS pseudo-element such as ::before
+                for (int at = text.IndexOf("::"); false == xpath && -1 != at; at = text.IndexOf("::", at + 2))
+                    xpath = XPathAxis.IsMatch(text.Substring(0, at + 2));
+
+                foreach (Match bracket in Regex.Matches(text, @"\[([^\[\]]*)\]"))
+                    if (false == xpath && false == CssAttributeTest.IsMatch(bracket.Groups[1].Value))
+                        xpath = true;
+
+                // a '|' after a space or ')' joins two XPaths; in CSS it separates a namespace from a name or is part of |=
+                if (false == xpath && text.Contains("|"))
+                    xpath = Regex.IsMatch(text, @"(\s|\))\|(?!=)");
             }
 
-            // Lone @attr (very strong XPath signal)
-            if (s.Contains("@") && !s.Contains("["))
-                return true;
-
-            // Very strong CSS indicators -> definitely treat as CSS, not XPath
-            if (s.StartsWith("#") ||
-                s.StartsWith(".") ||
-                s.Contains(">") ||
-                s.Contains("+") ||
-                s.Contains("~") ||
-                s.Contains(":not(") ||
-                s.Contains(":nth-child") ||
-                s.Contains(":nth-of-type"))
-            {
-                return false;
-            }
-
-            // Contains [ but no other strong CSS markers -> lean toward XPath
-            if (s.Contains("[") && !s.Contains(":") && !s.Contains("#") && !s.Contains("."))
-                return true;
-
-            // Final fallback - assume CSS unless strong XPath evidence
-            return false;
+            return xpath;
         }
         #endregion
 

@@ -62,10 +62,23 @@ namespace GenerallyPositive.Browser
         // name of this browser instance, set by GPAL factory
         internal string BrowserName { get; set;  }  = null;
         internal string DriverLocation { get; set;  } = null;
-        internal int ServiceDriverPid { get; set; } = 0;
-        // load images on a web page?
+        // Every driver GPAL starts is remembered until it is ended, so a driver a Close could not end is ended when
+        // the program exits.
+        internal int ServiceDriverPid
+        {
+            get { return serviceDriverPid; }
+            set
+            {
+                if (0 < value)
+                    BrowserHelper.RememberDriver(value);
+
+                serviceDriverPid = value;
+            }
+        }
+        private int serviceDriverPid = 0;
+        // load images on web pages
         internal bool LoadImages { get; set; } = true;
-        // open pdf documents in external program?
+        // open pdf documents in an external program
         internal bool OpenPDFExternally { get; set; } = false;
         // open file save dialog; off, so downloads go straight to the download folder
         internal bool PromptForDownload { get; set; } = false;
@@ -84,7 +97,7 @@ namespace GenerallyPositive.Browser
         // session.
         internal ICredentials Credentials { get; set; }
         internal DateTime? CredentialsPresented { get; set; }
-        // when performing an action, do we wait on document.ready?
+        // wait on document.ready when performing an action
         internal bool WaitOnDocumentReady { get; set; } = true;
         internal bool WaitOnNetworkIdle { get; set; } = false;
         internal int NetworkIdleTimeoutMs { get; set; } = 30_000;
@@ -249,10 +262,11 @@ namespace GenerallyPositive.Browser
             set
             {
                 _currentGPALUrl = value;
-                StorageActionToRun = new StorageAction();   // any time we set this, we reset the action to run, but this doesn't help us clear values from a prior call
+                StorageActionToRun = new StorageAction();   // a new url starts a new storage action
             }
         }
-        internal List<GPALUrl> GPALUrlList { get; set; }
+        // each tab's GPALUrl, by the engine's tab key: a Selenium window handle, a Puppeteer target id, an OttoMagic tab id
+        internal Dictionary<string, GPALUrl> TabGPALUrls { get; set; }
 
         // set by For: the url whose storage definitions the next RunGet, RunSet or RunDelete uses, in place of
         // the page the browser is on. Used once and cleared, so the run after it is back on the current page
@@ -276,7 +290,7 @@ namespace GenerallyPositive.Browser
         internal bool UseDirectDownload { get; set; } = false;
         internal string DownloadLocation { get; set; }
         internal bool DeleteFileBeforeDownload { get; set; } = false;
-        internal bool OpenInTab { get; set; } = false;   // caveat: note: only good for one GoTo
+        internal bool OpenInTab { get; set; } = false;   // applies to one GoTo
         internal bool UseHeadless { get; set; } = false;
         internal bool? FileDownloaded { get; set; }
         internal bool ScrollIntoView { get; set; } = false;
@@ -292,7 +306,7 @@ namespace GenerallyPositive.Browser
         internal int ServerResponseCode { get; set; }
 
         internal Bitmap ScreenShot;
-        internal Process Process { get; set; } = null;  // set when using ottomatic/magic which launches the browser without a driver
+        internal Process Process { get; set; } = null;  // the browser's process, when GPAL launched or found it
         internal int WhileLoopTimeoutMs { get; set; } = 30000; // Default: 30 seconds
         internal int WhileLoopMaxIterations { get; set; } = 1000; // Default: 1000 iterations
         internal List<Action<IBrowser>> Workflows { get; set; }
@@ -306,7 +320,7 @@ namespace GenerallyPositive.Browser
             RobotsTxt = new List<string>();
             StorageActionToRun = new StorageAction();
             StorageActionCalled = false;
-            GPALUrlList = new List<GPALUrl>();
+            TabGPALUrls = new Dictionary<string, GPALUrl>();
         }
     }
 }

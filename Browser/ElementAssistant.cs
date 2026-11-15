@@ -300,7 +300,9 @@ namespace GenerallyPositive.Browser
                 if (true == ElementSettings.Browser.UseOttoMagic)
                     ElementSettings.Browser.MagicHelper.PressModifierKey(modifierKeys);
                 else if (true == ElementSettings.Browser.UsePuppeteer)
-                    ElementSettings.Browser.PuppeteerClient.PressModifierKey(modifierKeys);
+                    ElementSettings.Browser.PuppeteerClient.PressModifierKey(modifierKeys).Execute();
+                else if (true == ElementSettings.Browser.BrowserSettings.HiddenDesktop)
+                    ElementSettings.Browser.PressModifierKey(modifierKeys);     // Selenium's own keys; the real keyboard cannot reach a hidden desktop
                 else
                     HardwareHelper.PressModifierKey(modifierKeys);
             }
@@ -319,7 +321,9 @@ namespace GenerallyPositive.Browser
                 if (true == ElementSettings.Browser.UseOttoMagic)
                     ElementSettings.Browser.MagicHelper.ReleaseModifierKey(modifierKeys);
                 else if (true == ElementSettings.Browser.UsePuppeteer)
-                    ElementSettings.Browser.PuppeteerClient.ReleaseModifierKey(modifierKeys);
+                    ElementSettings.Browser.PuppeteerClient.ReleaseModifierKey(modifierKeys).Execute();
+                else if (true == ElementSettings.Browser.BrowserSettings.HiddenDesktop)
+                    ElementSettings.Browser.ReleaseModifierKey(modifierKeys);   // Selenium's own keys; the real keyboard cannot reach a hidden desktop
                 else
                     HardwareHelper.ReleaseModifierKeys(modifierKeys);
             }

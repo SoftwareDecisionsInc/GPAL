@@ -28,60 +28,6 @@ using static GenerallyPositive.Browser.Browser;
 using static GenerallyPositive.Enums;
 using static GenerallyPositive.GPAL;
 
-/*
-var browser =
-    GPAL.Browser
-    // optional from here
-    .GlobalWaitOnDocumentReady(bool) // true - turn ON waiting for document.ready before returning from verb
-    .WithBrowser(BrowserType enum) // default chrome
-		.WithLoadImages(bool)   // default true
-        .WithScrollIntoView(bool) // default false - follow each scraped element on screen
-        .WithOpenPDFExternally(bool) // default true
-        .WithDownloadFileTypes(string) // csv - defaults?
-        .WithOpenFileTypes(string) // csv - defaults?
-    // optional to here
-    .GoTo(URL)
-
-    // test document.ready()
-    // do we ever deal with before/after/during events
-    // on With, create Selector container for this UOW which ends in an action
-    .WithSelector(searchSelector)
-    .FillInFrom(string) /// WithHardware implies moving the mouse and clicks and enter text via keyboard emulation
-
-    // test document.ready()
-    // on With, create Selector container for this UOW which ends in an action
-    .GlobalWaitOnDocumentReady(bool) // false - turn OFF waiting for document.ready before returning from verb
-    .WithSelector(searchButtonSelector)
-    .LeftClick() /// WithHardware implies moving the mouse and clicks
-
-    // test document.ready()
-    // on using, create Selector container for this UOW which ends in an action
-    // TODO: how to say do not return sparesely populated arrays
-    .WithSelector(colum1DataSelector)   // link .All at selector level
-    .WithSelector(colum2DataSelector)   // description .All at selector level
-    .WithSelector(colum3DataSelector)   // price .All at selector level
-    .WithSelector(colum4DataSelector)   // image link .All at selector level
-    .WithSelector(colum5DataSelector)   // repeat this one value in this column for all rows .Repeat at selector level
-                                        // indicates above selectors are repeated and get all on the current page matching pattern
-    .WithAll
-    .WithNextPageButton(nextPageSelector)   // if not defined, only gets current page
-    .WithPages(10)  // default is one page, but should be used in conjunction with above
-    .GetGrid()  // change the return type to Tokens for manipulation/validation/saving
-
-    // test document.ready()
-    // tied to GPALGrid object
-    .WithHeader(columnAString)
-    .WithHeader(columnBString)
-    .WithHeader(columnCString)
-    .WithHeader(columnDString)
-    .WithHeader(columnEString)
-    .SaveToExcel(fileName)  // return type is GPAL.browser
-
-    // the formal end of everything
-    .Close()	// implies dispose, implement IDisposable on Browser
-
-    // end of iterations
-*/
 namespace GenerallyPositive.Browser
 {
     #region <BrowserInterfaces>
@@ -129,7 +75,7 @@ namespace GenerallyPositive.Browser
         string JavaScriptResultStr { [Data(Description = "The result string returned by the most recent ExecuteJavaScriptStr call", Submenu = "Browser State")] get; }
         PuppeteerCommunicator PuppeteerCommunicator { [Data(Description = "Communicator used to send/receive messages to the Puppeteer engine for this Browser", Submenu = "Engines")] get; }
         IPuppeteerClient PuppeteerClient { [Data(Description = "The Puppeteer client used to issue commands when this Browser is using the Puppeteer engine", Submenu = "Engines")] get; }
-        int ServerResponseCode { [Data(Description = "HTTP status code of the most recent page navigation/response", Submenu = "Browser State")] get; set; } // CAVEAT: public set: unsure why visual studio will not let me use internal set in Broser without set here, like everywhere else
+        int ServerResponseCode { [Data(Description = "HTTP status code of the most recent page navigation/response", Submenu = "Browser State")] get; set; } // CAVEAT: public set: MagicHelper sets it through IBrowser, so the interface carries the setter
         string SiteMapSource { [Data(Description = "The sitemap text the last GetSiteMapUrls read", Submenu = "Browser State")] get; }
         IReadOnlyList<string> ColumnNames { [Data(Description = "The column names the last GetGrid read off the page itself, from the header row of a table it was pointed at", Submenu = "Grids")] get; }
         bool UseOttoMagic { [Data(Description = "True if this Browser is using the OttoMagic automation engine", Submenu = "Browser State")] get; }
@@ -210,10 +156,8 @@ namespace GenerallyPositive.Browser
     }
     public interface IAllowDebugPort
     {
-        [Settings(Description = "Set debug port to use [57005 (0xdead) default]. Specify to reconnect to a browser session using .WithExistingCDPDebugPort.  If both port and pipe are set, port is preferred.", Submenu = "Engine")]
+        [Settings(Description = "Set the debug port the browser listens on [57005 (0xdead) default], which runs it on PuppeteerPort. Another program joins it with .WithExistingCDPDebugPort.", Submenu = "Engine")]
         IAllowBrowserSettingsOrGoTo WithCDPDebugPort(int debugPort = 0xdead);
-        [Settings(Description = "Use debug pipe for puppeteer commmunications. If both port and pipe are set, port is preferred.", Submenu = "Engine")]
-        IAllowBrowserSettingsOrGoTo WithCDPDebugPipe(bool trueFalse = false);
         [Settings(Description = "Drive a browser whose GPALRestAPI is already running, here or on another machine, instead of launching one", Submenu = "Engine")]
         IAllowBrowserSettingsOrGoTo WithGPALRestAPIUrl([URL] string restApiUrl);
     }
@@ -375,6 +319,8 @@ namespace GenerallyPositive.Browser
         IAllowBrowserActionOrAnySelector LeftClickAndDownload(GPALFile filenames);
         [Action(Description = "Left click the found element, handling an upload dialog after clicking.", Submenu = "Files")]
         IAllowBrowserActionOrAnySelector LeftClickAndUpload(GPALFile filenames);
+        [Action(Description = "Left click the found element and upload what is on the clipboard: the copied files for a FileList, otherwise a file written from it.", Submenu = "Files")]
+        IAllowBrowserActionOrAnySelector LeftClickAndUpload(IAllowClipboardInto clipboard);
         [Action(Description = "Left double click the found element, pressing modifier key (none [default]) while clicking.", Submenu = "Clicks")]
         IAllowBrowserActionOrAnySelector LeftDoubleClick();
         [Action(Description = "Right click the found element, pressing modifier key (none [default]) while clicking.", Submenu = "Clicks")]
@@ -415,6 +361,13 @@ namespace GenerallyPositive.Browser
         [Data(Description = "Insert text (wherever the cursor is) from a string", Submenu = "Fill In")]
         IAllowBrowserActionOrAnySelector InsertFrom(string textToUse);
 
+        [Data(Description = "Fill in [overwrite] text from the clipboard, in the form GetClipboard named", Submenu = "Fill In")]
+        IAllowBrowserActionOrAnySelector FillInFrom(IAllowClipboardInto clipboard);
+        [Data(Description = "Append to the end text from the clipboard, in the form GetClipboard named", Submenu = "Fill In")]
+        IAllowBrowserActionOrAnySelector AppendFrom(IAllowClipboardInto clipboard);
+        [Data(Description = "Insert text (wherever the cursor is) from the clipboard, in the form GetClipboard named", Submenu = "Fill In")]
+        IAllowBrowserActionOrAnySelector InsertFrom(IAllowClipboardInto clipboard);
+
         [Data(Description = "Fill in [overwrite] text from a file. CSV values per line takenized for each input selector", Submenu = "Fill In")]
         IAllowBrowserActionOrAnySelector FillInFrom(GPALFile inputFile);
         [Data(Description = "Append to the end text from a file. CSV values per line takenized for each input selector", Submenu = "Fill In")]
@@ -454,7 +407,7 @@ namespace GenerallyPositive.Browser
         IAllowAfterAnySelector InFrame(Selector selector);
 
         /// <summary>
-        /// NOTE: can only use CSS selectors in shadow dom
+        /// Only CSS selectors work inside a shadow dom.
         /// </summary>
         /// <param name="shadowDomSelector"></param>
         /// <returns></returns>
@@ -610,7 +563,8 @@ namespace GenerallyPositive.Browser
     public interface IAllowGet { [Browser(Description = "Navigate to the URL headless, launching a headless browser when none is open. Same navigation as GoTo, with the headless download options set first", Submenu = "Navigation")] IAllowBrowserActionOrAnySelector Get([URL()] GPALUrl URL); }
     public interface IAllowClose
     {
-        [Browser(Description = "Close the current browser session. True [default] to kill web drivers running.", Submenu = "Navigation")] void Close(bool killWebDrivers = false);
+        [Browser(Description = "Close the browser and end its web driver. Use Release to leave it running for another program.", Submenu = "Navigation")] void Close();
+        [Obsolete("Close() ends the browser and its web driver; call Close() instead.")] void Close(bool killWebDrivers);
         [Browser(Description = "Leave the browser running for another program to pick up, and end this one's hold on it.", Submenu = "Navigation")] void Release();
     }
     public interface IAllowFocus { [Action(Description = "Bring the current element (specified by .WithSelector) into focus.", Submenu = "Element")] IAllowBrowserActionOrAnySelector Focus(Selector selector = null); }
@@ -673,10 +627,8 @@ namespace GenerallyPositive.Browser
     #endregion <Atoms>
 
     #region <DerivedInterfaces>
-    // An emergent rule of thumb...
-    // If the word "Or" appears more than once, invent an umbrella term.
-    // And then derive stuff... from the derived stuff.
-    // Because nobody wants to look at IAllowGoToOrGlobalWaitOnDocumentReadyOrClose.
+    // An interface whose name would hold "Or" more than once gets an umbrella name and derives from other derived
+    // interfaces.
     // .WithTokensFrom and .WithPages both feed .Fetch, so either can come first
     public interface IAllowWithPagesAndFetch
         : IAllowWithPages
@@ -794,6 +746,7 @@ namespace GenerallyPositive.Browser
         , IAllowToGPALObject<IBrowser>
         , IAllowStartWorkflow
         , IAllowWithAllThatMatch
+        , IAllowGetElements
     { }
     public interface IAllowAfterImageSelector
         : IAllowWithNextPageButtonOrGetGrid
@@ -805,7 +758,7 @@ namespace GenerallyPositive.Browser
         , IAllowCallBack
         , IAllowFillInFrom
     { }
-    // NOTE: Add to BELOW LIST what is added here
+    // NOTE: an interface added to IAllowAfterAnySelector also goes in IAllowAfterAnySelectorExceptWithAll below
     public interface IAllowAfterAnySelector
         : IAllowWithNextPageButtonOrGetGrid
         , IAllowWithInfiniteScroll
@@ -823,7 +776,7 @@ namespace GenerallyPositive.Browser
         , IAllowStartWorkflow
         , IAllowToGPALObject<IBrowser>
     { }
-    // NOTE: Add to this list what is added above
+    // NOTE: an interface added to IAllowAfterAnySelector above also goes in this list
     public interface IAllowAfterAnySelectorExceptWithAll
         : IAllowWithNextPageButtonOrGetGrid
         , IAllowWithInfiniteScroll
@@ -967,6 +920,8 @@ namespace GenerallyPositive.Browser
         // (.csv, .tsv/.txt, .xlsx, .json, .xml, .yaml, ...) or its explicit .WithDelimiter settings.
         [File(Description = "Save the retrieved grid. Output format and delimiter are determined by the GPALFile (its extension, or explicit file settings).")]
         IAllowBrowserActionOrAnySelector SaveTo(GPALFile file);
+        [File(Description = "Put the retrieved grid on the clipboard as text, rows as lines and cells separated by tabs.")]
+        IAllowBrowserActionOrAnySelector SaveTo(IAllowClipboardInput clipboard);
         [File(Description = "Append the retrieved grid. Output format and delimiter are determined by the GPALFile (its extension, or explicit file settings).")]
         IAllowBrowserActionOrAnySelector AppendTo(GPALFile file);
         [File(Description = "Hand back what .Fetch retrieved, as a JSON array holding one response body per page requested.")]
@@ -980,7 +935,6 @@ namespace GenerallyPositive.Browser
         IAllowGraphicSettings CaptureScreen(object ApplicationOrBrowser = null);
 
     }
-    // NOTE: TODO: might these be used in Convertor class?
     public interface IAllowGraphicSettings
     {
         [GPAL(Description = "Save to BASE64 string")]
@@ -1014,7 +968,7 @@ namespace GenerallyPositive.Browser
         [Browser(Description = "Sets browser to full screen", Submenu = "Windows")]
         void FullScreen();
         [Browser(Description = "Navigates to a URL", Submenu = "Navigation")]
-        string Get(GPALUrl URL); // NOTE: CAVEAT: not sure this makes sense, goto will be the same action on the browser, how it is Launched makes it headless...
+        string Get(GPALUrl URL); // the same navigation as GoTo; the launch is what makes it headless
         [Data(Description = "Gets content and CSS for a elementId", Submenu = "Element")]
         string GetContentAndCss(string elementId);
         [Data(Description = "The computed styles of the element", Submenu = "Element")]
@@ -1605,7 +1559,7 @@ namespace GenerallyPositive.Browser
         [Action(Description = "Configure this client to delete the given type of website storage", Submenu = "Storage")]
         IAllowPuppeteerStorageOptions DeleteStorage(WebsiteStorageType storageType);
         [Action(Description = "Configure this client to execute the given JavaScript in the page", Submenu = "Page")]
-        IAllowPuppeteerParameters ExecuteJavaScript([JavaScript] string script); // Removed params version as noted
+        IAllowPuppeteerParameters ExecuteJavaScript([JavaScript] string script);
         [Fluent(Description = "Issue an API request from inside the page, so it carries the session the browser already earned: its cookies, TLS fingerprint, header order and any anti-bot clearance. A relative url resolves against wherever the browser currently is")]
         IAllowPuppeteerParametersOrExecution Fetch([URL] string url);
         [Settings(Description = "HTTP method for the request", Submenu = "Request")]
@@ -1907,7 +1861,7 @@ namespace GenerallyPositive.Browser
         [Settings(Description = "User defined data, strictly used for filtering in GPAL")]
         IAllowGPALUrlStorageItemConfig WithUserDefined(string userDefined);
         /// <summary>
-        /// OttoMagic Only: For delete operations without a domain, limit to origin?
+        /// OttoMagic Only: whether a delete with no domain reaches past the current origin.
         /// true = delete across origins
         /// false = delete only in the current origin (default)
         /// </summary>

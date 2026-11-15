@@ -40,8 +40,9 @@ namespace GenerallyPositive
     {
         public override void WriteJson(JsonWriter writer, Complex value, JsonSerializer serializer)
         {
-            string separator = value.Imaginary >= 0 ? "+" : "-";
-            writer.WriteValue($"{value.Real.ToString(CultureInfo.InvariantCulture)}{separator}{Math.Abs(value.Imaginary).ToString(CultureInfo.InvariantCulture)}i");
+            // the imaginary part keeps its sign, a negative zero included
+            string separator = 0 > BitConverter.DoubleToInt64Bits(value.Imaginary) ? "-" : "+";
+            writer.WriteValue($"{ConverterHelper.NumberText(value.Real)}{separator}{ConverterHelper.NumberText(Math.Abs(value.Imaginary))}i");
         }
 
         public override Complex ReadJson(JsonReader reader, Type objectType, Complex existingValue, bool hasExistingValue, JsonSerializer serializer)
@@ -81,8 +82,46 @@ namespace GenerallyPositive
         }
     }
 
-    // BigInteger usually works fine in recent Json.NET versions (serialized as string for large values),
-    // but if you hit issues with very large numbers, add this:
+    // Writes a decimal as its own digits, 52000 or 98000.00, as the other formats write it, where json would write
+    // 52000.0, and reads it back as a decimal
+    internal class DecimalJsonConverter : JsonConverter<decimal>
+    {
+        public override void WriteJson(JsonWriter writer, decimal value, JsonSerializer serializer)
+        {
+            writer.WriteRawValue(value.ToString(CultureInfo.InvariantCulture));
+        }
+
+        public override decimal ReadJson(JsonReader reader, Type objectType, decimal existingValue, bool hasExistingValue, JsonSerializer serializer)
+        {
+            return Convert.ToDecimal(reader.Value, CultureInfo.InvariantCulture);
+        }
+    }
+
+    // Writes a double or a float as the other formats write it, the shortest text that reads back as the same number, 3
+    // and not 3.0, and -0 for a negative zero; NaN and Infinity are written as json writes them, as text
+    internal class DoubleJsonConverter : JsonConverter
+    {
+        public override bool CanConvert(Type objectType)
+        {
+            return typeof(double) == objectType || typeof(float) == objectType;
+        }
+
+        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+        {
+            string text = value is double number ? ConverterHelper.NumberText(number) : ConverterHelper.NumberText((float)value);
+            if (true == char.IsDigit(text[text.Length - 1]))
+                writer.WriteRawValue(text);
+            else
+                writer.WriteValue(text);
+        }
+
+        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+        {
+            return typeof(float) == objectType ? (object)Convert.ToSingle(reader.Value, CultureInfo.InvariantCulture) : Convert.ToDouble(reader.Value, CultureInfo.InvariantCulture);
+        }
+    }
+
+    // Writes a BigInteger as a string and reads it back from one.
     public class BigIntegerJsonConverter : JsonConverter<BigInteger>
     {
         public override void WriteJson(JsonWriter writer, BigInteger value, JsonSerializer serializer)

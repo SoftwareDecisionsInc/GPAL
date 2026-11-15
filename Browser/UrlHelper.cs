@@ -28,11 +28,6 @@ using static GenerallyPositive.Enums;
 using Nager.PublicSuffix;
 using Nager.PublicSuffix.RuleProviders;
 
-// TODO: add cookie object, create cookies using another fluent object as there are a lot of columns to create
-// for now create exact matches, later we will designate pattern matching for domain, path, key and storename - wildcard characters will be required to prove intent
-// if we see a wildcard char, the treat it as a pattern match....
-
-// written by grok, modified by mbv
 namespace GenerallyPositive.Browser
 {
     /// <summary>
@@ -60,7 +55,7 @@ namespace GenerallyPositive.Browser
             cookies (domain, path) - deletes all cookies under the given domain AND path
             cookies (domain, key, path) - deletes all cookies under the given domain AND path with the name "key"
             *cookies (key) - deletes all cookies across all domains with the name "key"
-            NOTE: There can be multiple cookies on a website with the same "name/key" where the only parameter that separates them is the path, hence its inclusion
+            Cookies on one website can share a name/key and differ only by path, so path is a parameter
  
  
             localStorage - deletes all localStorage
@@ -80,22 +75,20 @@ namespace GenerallyPositive.Browser
  
             indexedDb - deletes all indexedDb entries across all domains (considered nuclear option, warned against doing)
 
-            NOTE: cannot be done using simple API, must use chrome.debugger + Storage.clearDataForOrigin
+            No simple API does this; it takes chrome.debugger + Storage.clearDataForOrigin
                        This is the only mechanism that can wipe IndexedDB across arbitrary sites.
  
             Attach a debugger to each open tab
-            For that tab’s origin, clear IndexedDB
+            For that tab's origin, clear IndexedDB
             Repeat for every tab
             Repeat again as new tabs open
  
             indexedDb (domain) - deletes all indexedDb data under the given domain
             indexedDb (domain, path) - deletes database with the name "path" under the given domain
             indexedDb (domain, path, key) - deletes specific "key" object from the "path" database under the given domain
-            NOTE: the parameter name path isn't quite accurate for indexedDb, its being used as a database-name here
+            For indexedDb, path holds the database name
          */
 
-        // TODO: origin is different than domain, domain is the cookie domain like .youtube.com - we will match on the specifically
-        //      origin is another filter to see whether that storage object applies to the origin
         /// <summary>
         /// Gives a storage read the same shape on every engine: the stored value for a keyed read, the key/value
         /// object for a wildcard read. An engine's wrapper around a keyed value is removed.
@@ -161,7 +154,7 @@ namespace GenerallyPositive.Browser
             string defaultOrigin = GetOrigin(gpalUrl.Url);
             IEnumerable<StorageAction> storageActions = null;
 
-            // NOTE: null == wildcard, not set, choose all of that type
+            // A null parameter is a wildcard: with none set, every action of the storage type runs
             if (null == storageActionParameters.Domain && null == storageActionParameters.Key && null == storageActionParameters.Path && null == storageActionParameters.StoreName
                 && null == storageActionParameters.UserDefined)
             {
@@ -172,7 +165,6 @@ namespace GenerallyPositive.Browser
             }
             else
             {
-                // refactored by Grok 4.20
                 var p = storageActionParameters;
 
                 storageActions = gpalUrl.GetActions().Where(a =>
@@ -224,7 +216,7 @@ namespace GenerallyPositive.Browser
                         else if (true == browserSettings.UseSelenium)
                         {
                             StorageAction sa = new StorageAction(action);   // preserve the original action for domain reuse
-                            sa.Domain = origin; // use wildcards for cookie
+                            sa.Domain = origin;
                             data = seleniumStorageHelper.GetStorage(sa);
                         }
 
@@ -249,7 +241,7 @@ namespace GenerallyPositive.Browser
                 }
                 else if (WebsiteStorageAction.delete == storageActionParameters.Action)
                 {
-                    // NOTE: all should return an int of number of deleted items?
+                    // each engine returns success as a bool; Selenium returns the number deleted, and nonzero is success
                     try
                     {
                         if (true == browserSettings.UseOttoMagic)
@@ -261,8 +253,8 @@ namespace GenerallyPositive.Browser
                         else if (true == browserSettings.UseSelenium)
                         {
                             StorageAction sa = new StorageAction(action);   // preserve the original action for domain reuse
-                            sa.Domain = origin; // use wildcards for cookie
-                            data = seleniumStorageHelper.DeleteStorage(sa).ToString();   // returns number of items deleted... maybe we return that as data for all?
+                            sa.Domain = origin;
+                            data = seleniumStorageHelper.DeleteStorage(sa).ToString();   // the number of items deleted
                             retVal = false == "0".Equals(data);
                         }
 
@@ -279,7 +271,7 @@ namespace GenerallyPositive.Browser
                 }
                 else if (WebsiteStorageAction.set == storageActionParameters.Action)
                 {
-                    // NOTE: all should return bool for operation success
+                    // each engine returns a bool for success
                     try
                     {
                         if (true == browserSettings.UseOttoMagic)
@@ -291,7 +283,7 @@ namespace GenerallyPositive.Browser
                         else if (true == browserSettings.UseSelenium)
                         {
                             StorageAction sa = new StorageAction(action);   // preserve the original action for domain reuse
-                            sa.Domain = origin; // use wildcards for cookie
+                            sa.Domain = origin;
                             sa.Data = storageActionParameters.Data;
                             retVal = seleniumStorageHelper.SetStorage(sa);
                         }
@@ -501,7 +493,6 @@ namespace GenerallyPositive.Browser
         }
         #endregion Storage Handling
         #region ROBOTS.TXT and ROBOTS META TAG
-        // written by ChatGPT
         // Cache per-host robots.txt
         private static readonly ConcurrentDictionary<string, string[]> RobotsCache =
             new ConcurrentDictionary<string, string[]>();
@@ -612,7 +603,7 @@ namespace GenerallyPositive.Browser
                 return true;
             }
             else
-                // newtab and others will call getfullurl which will cause robots check recursion...
+                // NewTab and others call GetFullUrl, which would run this check again
                 inRobotsCheck = true;
 
             try
@@ -649,8 +640,7 @@ namespace GenerallyPositive.Browser
 
                     lines = RobotsCache.GetOrAdd(host, h =>
                     {
-                        // use httpclient to get robots.txt - but we might be blocked
-                        // backup is to get the robots.txt in the browser which will always work
+                        // HttpClient first; a site can block it, so the fallback reads robots.txt in a browser tab
                         try
                         {
                             var task = client.GetStringAsync($"{uri.Scheme}://{h}/robots.txt");
@@ -775,16 +765,12 @@ namespace GenerallyPositive.Browser
         private static System.Collections.Concurrent.ConcurrentDictionary<string, HashSet<string>> _metaTagAuditCache;
 
         // Track last domain visited to clear cache when domain changes
-        // NOTE: CAVEAT: this is problematic, do it every time until we understand why it is problematic
         private static string _lastDomain;
 
         /// <summary>
-        /// Checks the robot meta tags on the page we are visiting
-        /// But it's not really clear these apply to us, but some roboticists claim
-        /// reading a page then reading the tags regarding search display or link following, somehow means 'do not scrape this page'
-        /// but one has to scrape the page to read those, so they are technically not directive to not scrape, just don't display in search or follow links (various reasons why)
-        /// but robots.txt really is the source for dis/allow.
-        /// NOTE: CAVEAT: this incurs a wait in the workflow if the page does not have robot tags and times out (affects ottomagic)
+        /// Reads and logs the robots meta tag of the page being visited. Its directives (noindex, nofollow, none)
+        /// govern search display and link following; robots.txt governs access.
+        /// CAVEAT: on OttoMagic, a page with no robots meta tag makes the lookup wait for its timeout before the workflow goes on
         /// </summary>
         /// <param name="url"></param>
         /// <param name="browser"></param>
@@ -815,7 +801,7 @@ namespace GenerallyPositive.Browser
             HashSet<string> loggedDirectives = _metaTagAuditCache.GetOrAdd(url.Url, _ => new HashSet<string>());
 
             if (0 == loggedDirectives.Count)
-                // Only if browser given, do we proceed
+                // only for a browser that was started
                 if (null != browser.Process || 0 != browser.BrowserSettings.ServiceDriverPid)
                 {
                     try
@@ -834,7 +820,7 @@ namespace GenerallyPositive.Browser
                             if (null != theHead)
                                 foreach (GPALElement element in theHead)
                                 {
-                                    // KLUDGE: using this command on an element, it expects the browser, but magic doesn't add that, so we will
+                                    // KLUDGE: OttoMagic returns elements with no Browser set, and GetAttribute needs it, so it is set here
                                     element.Browser = browser;
                                     content = element.GetAttribute("content");
                                 }
@@ -856,7 +842,7 @@ namespace GenerallyPositive.Browser
                                 }
                                 catch
                                 {
-                                    // Too fast we were? Retry, we shall
+                                    // the script can fail while the page is still loading, so retry
                                 }
                             } while (0 < retries--);
                         }
@@ -942,8 +928,7 @@ namespace GenerallyPositive.Browser
                 if (uri1.Query != uri2.Query)
                     return false;
 
-                // Fragment usually ignored for equivalence
-                // (if you want to consider it, compare uri1.Fragment == uri2.Fragment)
+                // the fragment is ignored
 
                 return true;
             }

@@ -46,6 +46,21 @@ namespace GenerallyPositive.GPALForm
                 Icon = icon;
         }
 
+#if NET
+        /// <summary>
+        /// On .NET 10, Application.Exit closes a form shown with ShowDialog but leaves ShowDialog running, so the
+        /// window stays up. Hiding the form ends ShowDialog, as Application.Exit does on net48.
+        /// </summary>
+        /// <param name="e">Why the form closed</param>
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            base.OnFormClosed(e);
+
+            if (CloseReason.ApplicationExitCall == e.CloseReason && true == Modal)
+                Hide();
+        }
+#endif
+
         [System.Runtime.InteropServices.DllImport("shell32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
         private static extern uint ExtractIconEx(string file, int iconIndex, IntPtr[] largeIcons, IntPtr[] smallIcons, uint icons);
 

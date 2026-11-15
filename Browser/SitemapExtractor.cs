@@ -26,7 +26,6 @@ using System.Xml.Linq;
 using GenerallyPositive;
 using static GenerallyPositive.Enums;
 
-// wirtten by grok, updated by mbv
 namespace GenerallyPositive.Browser
 {
     internal class SitemapExtractor
@@ -181,7 +180,7 @@ namespace GenerallyPositive.Browser
                 .Replace("\\t", "\t")      // \t  > tab
                 .Replace("\\r", "\r")      // \r  > carriage return
                 .Replace("\\\\", "\\")     // \\  > single backslash (if doubled)
-                                           // Optional: remove any leading/trailing control characters or BOM
+                                           // trim whitespace, then a leading BOM or zero-width character
                 .Trim()
                 .TrimStart('\uFEFF', '\u200B', '\u200C', '\u200D');
 
@@ -241,11 +240,11 @@ namespace GenerallyPositive.Browser
                 return;
             }
 
-            // Step 3: Proceed with normal extraction (unchanged)
+            // Step 3: read the sitemap entries
             XNamespace ns = "http://www.sitemaps.org/schemas/sitemap/0.9";
             XNamespace emptyNs = "";
 
-            // Sitemap index?
+            // sitemap index
             var sitemapElements = doc.Descendants(ns + "sitemap")
                                      .Concat(doc.Descendants(emptyNs + "sitemap"))
                                      .ToList();
@@ -411,7 +410,8 @@ namespace GenerallyPositive.Browser
 
         static Dictionary<string, List<string>> returnedSitemaps = new Dictionary<string, List<string>>();
 
-        // Helper: build initial sitemap URL from GPALUrl (still useful for caller)
+        // The sitemap urls for a domain, kept per domain: those its robots.txt lists, or its sitemap.xml when robots.txt
+        // is read and lists none
         public List<string> GetSitemapUrl(GPALUrl domainUrl, out bool isFromRobotsTxt)
         {
             List<string> sitemapUrls = new List<string>();
@@ -420,7 +420,7 @@ namespace GenerallyPositive.Browser
             string domain = ExtractDomain(inputUrl);
             isFromRobotsTxt = false;
 
-            // have we already done this? return the cache
+            // start from the cached list for this domain
             // copy the cached list, so the merge below does not add to the list it is enumerating
             if (false == domainUrl?.Url.ToLower().EndsWith(".xml") && true == returnedSitemaps.ContainsKey(domain))
                 sitemapUrls = new List<string>(returnedSitemaps[domain]);
@@ -445,10 +445,8 @@ namespace GenerallyPositive.Browser
                     isFromRobotsTxt = true;
                 }
             }
-            // else, not allowed here, we are on about:blank
+            // when CheckRobotsTxt returns false, nothing is read from robots.txt
 
-            // NOT SURE why i didn't want to overwrite?
-            //if (0 == browser.RobotsTxt.Count)
             browser.RobotsTxt = robotsTxt;
 
             if (true == returnedSitemaps.ContainsKey(domain))
@@ -475,8 +473,7 @@ namespace GenerallyPositive.Browser
         {
             if (string.IsNullOrWhiteSpace(content))
                 return false;
-            // press and hold
-            // #px-captcha - is the css for the button which is in a closed shadowdom
+            // PerimeterX asks for a press and hold on #px-captcha, a button inside a closed shadow root
             bool isBotCheck = content.IndexOf("Robot or human?", StringComparison.OrdinalIgnoreCase) >= 0
                    && content.IndexOf("px-captcha", StringComparison.OrdinalIgnoreCase) >= 0;
 
@@ -495,7 +492,7 @@ namespace GenerallyPositive.Browser
 
             string trimmed = content.Trim().Trim('\"');
 
-            // 1. Looks like raw XML sitemap?
+            // 1. raw XML sitemap
             if (trimmed.StartsWith("<?xml") || trimmed.Contains("<sitemapindex") || trimmed.Contains("<urlset"))
             {
                 try
@@ -505,12 +502,11 @@ namespace GenerallyPositive.Browser
                 }
                 catch
                 {
-                    // Invalid XML — maybe html
-                    //return false;
+                    // invalid XML: go on to the html checks
                 }
             }
 
-            // 2. Browser-wrapped XML viewer?
+            // 2. XML wrapped in the browser's XML viewer
             if (trimmed.Contains("webkit-xml-viewer-source-xml") || trimmed.Contains("<div id=\"webkit-xml-viewer-source-xml\">") ||
                 trimmed.Contains("<sitemapindex") || trimmed.Contains("<urlset") || trimmed.Contains("<loc>"))
             {
@@ -518,7 +514,7 @@ namespace GenerallyPositive.Browser
                 return trimmed.Contains("<sitemapindex") || trimmed.Contains("<urlset") || trimmed.Contains("<loc>");
             }
 
-            // 3. HTML sitemap (Indeed-style, list of links)?
+            // 3. HTML sitemap (Indeed-style, a list of links)
             // Count absolute URLs, especially those ending in .xml or containing /sitemap
             var urlMatches = System.Text.RegularExpressions.Regex.Matches(trimmed, @"https?://[^\s""'<>\)\]]+");
             int totalUrls = urlMatches.Count;
@@ -537,9 +533,8 @@ namespace GenerallyPositive.Browser
                 }
             }
 
-            // NOTE: hardcoded values - Heuristic: at least 5 URLs, and at least 2 look sitemap-like
-            // NOTE: CAVEAT: KLUDGE: I'm not sure about the xml count, i'm not convinced they will have anything with xml in it...
-            // TODO: add settings for these? fina a better heuristic?
+            // The html check passes with at least 10 urls, at least 2 of them ending in .xml or containing /sitemap
+            // CAVEAT: an html sitemap that lists fewer than 2 .xml or /sitemap urls is not recognized
             return totalUrls >= 10 && xmlUrls >= 2;
         }
 

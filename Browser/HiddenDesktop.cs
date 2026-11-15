@@ -642,6 +642,16 @@ namespace GenerallyPositive.Browser
             return retVal;
         }
 
+        /// <summary>
+        /// The window that owns a window, such as the application window that owns its dialog.
+        /// </summary>
+        /// <param name="window">The window to ask about.</param>
+        /// <returns>The owner, or IntPtr.Zero when the window has none.</returns>
+        internal static IntPtr OwnerWindowOf(IntPtr window)
+        {
+            return GetWindow(window, GW_OWNER);
+        }
+
         // how long the programs on a desktop are given to close themselves before they are ended
         private const int CLOSING_MS = 5000;
 

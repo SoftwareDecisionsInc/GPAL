@@ -31,6 +31,7 @@ namespace GenerallyPositive
         public string InputText { get; set; }
         public IGPALGrid<string> InputGrid { get; set; }
         public GPALFile InputFile { get; set; }
+        public string Filename { get; set; }
 
         public ClipboardSettings(GPALClipboard clipboard)
         {
@@ -98,8 +99,8 @@ namespace GenerallyPositive
         }
 
         /// <summary>
-        /// The file to put on the clipboard. Its text goes on for every type except FileList, where the file
-        /// itself goes on, which is what pasting into a folder expects.
+        /// The file to put on the clipboard. Its text goes on for every type except FileList, where the files
+        /// themselves go on, every one the GPALFile names, which is what pasting into a folder expects.
         /// </summary>
         /// <param name="file">The file</param>
         /// <returns>Fluent interface to set the clipboard</returns>
@@ -137,6 +138,20 @@ namespace GenerallyPositive
         public IAllowClipboardInto GetClipboard(ClipboardType clipboardType = ClipboardType.Text)
         {
             ClipboardSettings.ClipboardType = clipboardType;
+            return this;
+        }
+
+        /// <summary>
+        /// The name of the file a browser's LeftClickAndUpload or an application's LeftClickAndOpen writes the
+        /// clipboard to before handing it over. A bare name goes in
+        /// GPAL's temp folder; a full path is used as given. Not set, the name is clipboard plus the type's
+        /// extension: .txt, .html, .rtf, .csv or .png.
+        /// </summary>
+        /// <param name="filename">The file name</param>
+        /// <returns>Fluent interface to use or save what was read</returns>
+        public IAllowClipboardInto WithFilename(string filename)
+        {
+            ClipboardSettings.Filename = filename;
             return this;
         }
 
@@ -219,6 +234,114 @@ namespace GenerallyPositive
         }
 
         /// <summary>
+        /// The clipboard as text to fill a field with, in the form GetClipboard named. FileList gives the copied
+        /// paths, one per line. An image fills nothing.
+        /// </summary>
+        /// <returns>The text, null when the clipboard holds nothing of that type or holds an image</returns>
+        internal string TextToFill()
+        {
+            string retVal = null;
+
+            if (ClipboardType.Image == ClipboardSettings.ClipboardType)
+                GPAL.PublishSimpleEvent(GPALEventType.ERROR, "An image on the clipboard cannot fill in a field. Upload it with LeftClickAndUpload", this, GPALObjectType.Other);
+            else
+            {
+                OnStaThread(() => retVal = Read());
+
+                if (null == retVal)
+                    GPAL.PublishSimpleEvent(GPALEventType.WARNING, $"The clipboard holds nothing of type [{ClipboardSettings.ClipboardType}], so nothing was filled in", this, GPALObjectType.Other);
+            }
+
+            return retVal;
+        }
+
+        /// <summary>
+        /// The clipboard as a file to upload. FileList gives the copied files themselves. Every other type is
+        /// written to the WithFilename file, or to clipboard plus the type's extension in GPAL's temp folder. The
+        /// file stays there, since the browser reads it when the page sends it.
+        /// </summary>
+        /// <returns>The file, null when the clipboard holds nothing of that type</returns>
+        internal GPALFile FileToUpload()
+        {
+            GPALFile retVal = null;
+            string read = null;
+
+            if (ClipboardType.FileList == ClipboardSettings.ClipboardType)
+            {
+                OnStaThread(() => read = Read());
+
+                if (null != read)
+                {
+                    retVal = new GPALFile();
+
+                    foreach (string name in read.Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        ((IGPALFileInternal)retVal).FileSettings.Filenames.Add(name);
+                        ((IGPALFileInternal)retVal).FileSettings.AddName(1);
+                    }
+                }
+            }
+            else
+            {
+                string path = Path.Combine(GPAL.TempDirectory(), ClipboardSettings.Filename ?? "clipboard" + ExtensionFor(ClipboardSettings.ClipboardType));
+                bool written = false;
+
+                if (ClipboardType.Image == ClipboardSettings.ClipboardType)
+                    OnStaThread(() => written = WriteImageFile(path));
+                else
+                {
+                    OnStaThread(() => read = Read());
+
+                    if (null != read)
+                    {
+                        FileHelper.EnsureFolderFor(path);
+                        File.WriteAllText(path, read);
+                        written = true;
+                    }
+                }
+
+                if (true == written)
+                    retVal = path;
+            }
+
+            if (null == retVal)
+                GPAL.PublishSimpleEvent(GPALEventType.WARNING, $"The clipboard holds nothing of type [{ClipboardSettings.ClipboardType}], so nothing was uploaded", this, GPALObjectType.Other);
+
+            return retVal;
+        }
+
+        /// <summary>
+        /// The file extension for a clipboard type, used to name the file an upload writes.
+        /// </summary>
+        /// <param name="clipboardType">The type</param>
+        /// <returns>The extension, with its dot</returns>
+        private static string ExtensionFor(ClipboardType clipboardType)
+        {
+            string retVal;
+
+            switch (clipboardType)
+            {
+                case ClipboardType.Html:
+                    retVal = ".html";
+                    break;
+                case ClipboardType.Rtf:
+                    retVal = ".rtf";
+                    break;
+                case ClipboardType.Csv:
+                    retVal = ".csv";
+                    break;
+                case ClipboardType.Image:
+                    retVal = ".png";
+                    break;
+                default:
+                    retVal = ".txt";
+                    break;
+            }
+
+            return retVal;
+        }
+
+        /// <summary>
         /// Returns the WithInput value as clipboard text: a grid as tab-separated lines, a file as its contents.
         /// FileList and Image put the file itself on the clipboard.
         /// </summary>
@@ -257,7 +380,12 @@ namespace GenerallyPositive
             {
                 // An image is set from a file or a base64 string, the format GetClipboard returns.
                 if (null != ClipboardSettings.InputFile)
-                    Attempt(() => System.Windows.Forms.Clipboard.SetImage(Image.FromFile(ClipboardSettings.InputFile.Filename)), "put an image on the clipboard");
+                    Attempt(() =>
+                    {
+                        // SetImage copies the picture, so the file is let go once it is on the clipboard
+                        using (Image image = Image.FromFile(ClipboardSettings.InputFile.Filename))
+                            System.Windows.Forms.Clipboard.SetImage(image);
+                    }, "put an image on the clipboard");
                 else if (false == string.IsNullOrWhiteSpace(text))
                     Attempt(() => System.Windows.Forms.Clipboard.SetImage(ImageHelper.Base64ToImage(text)), "put an image on the clipboard");
                 else
@@ -269,7 +397,10 @@ namespace GenerallyPositive
             if (ClipboardType.FileList == ClipboardSettings.ClipboardType)
             {
                 var files = new StringCollection();
-                files.Add(ClipboardSettings.InputFile.Filename);
+
+                foreach (string name in ClipboardSettings.InputFile.Filenames)
+                    files.Add(name);
+
                 data.SetFileDropList(files);
             }
             else
@@ -303,7 +434,11 @@ namespace GenerallyPositive
                     string format = FormatFor(ClipboardSettings.ClipboardType);
 
                     if (true == System.Windows.Forms.Clipboard.ContainsData(format))
+#if NET
+                        System.Windows.Forms.Clipboard.TryGetData(format, out retVal);
+#else
                         retVal = System.Windows.Forms.Clipboard.GetData(format) as string;
+#endif
                 }
             }, "read the clipboard");
 
@@ -340,8 +475,11 @@ namespace GenerallyPositive
         /// Writes the clipboard image to a file, in the format of its extension.
         /// </summary>
         /// <param name="file">The file to write</param>
-        private void WriteImageFile(GPALFile file)
+        /// <returns>True when the image was written</returns>
+        private bool WriteImageFile(GPALFile file)
         {
+            bool retVal = false;
+
             Attempt(() =>
             {
                 Image image = System.Windows.Forms.Clipboard.GetImage();
@@ -352,8 +490,11 @@ namespace GenerallyPositive
                 {
                     FileHelper.EnsureFolderFor(file.Filename);
                     image.Save(file.Filename, ImageHelper.FormatForFile(file.Filename));
+                    retVal = true;
                 }
             }, "read an image from the clipboard");
+
+            return retVal;
         }
 
         /// <summary>

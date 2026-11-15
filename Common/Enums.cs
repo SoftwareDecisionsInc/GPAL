@@ -294,7 +294,7 @@ namespace GenerallyPositive
 
                 dynamic value;
 
-                // Expected keys (adjust if you want)
+                // The mapping's first key is the wait time.
                 value = dictionary.Keys.First();
 
                 if (false == string.IsNullOrEmpty(value))
@@ -383,7 +383,7 @@ namespace GenerallyPositive
         /// </summary>
         public enum NextFilePattern
         {
-            /// <summary>report.csv -&gt; report20260723141530777.csv (yyyyMMddHHmmssfff, the original default).</summary>
+            /// <summary>report.csv -&gt; report20260723141530777.csv (yyyyMMddHHmmssfff).</summary>
             Timestamp = 0,
             /// <summary>report.csv -&gt; report_20260723_141530.csv (readable date and time).</summary>
             DateTimeStamp,
@@ -433,12 +433,12 @@ namespace GenerallyPositive
         /// </summary>
         /// <summary>
         /// Click type
-        /// NOTE: LeftClick is the same action as SelectClicType.LeftClick
+        /// ClickType.LeftClick is the same action as SelectClickType.LeftClick
         /// </summary>
         public enum ClickType { LeftClick, LeftDoubleClick, MiddleClick, RightClick }
         /// <summary>
-        /// Special types for Select menus: RandomSelect will pick a random menu item, SequentialSelect will walk the list (w/ and w/o wrapping)
-        /// note: LeftClick is the same action as ClicType.LeftClick
+        /// Click types for Select menus: SelectRandom picks a random option; SelectNext and SelectPrevious step through the options, and their WithWrap forms wrap at the ends
+        /// SelectClickType.LeftClick is the same action as ClickType.LeftClick
         /// </summary>
         public enum SelectClickType { LeftClick, SelectRandom, SelectNext, SelectNextWithWrap, SelectPrevious, SelectPreviousWithWrap }
         /// <summary>
@@ -492,7 +492,7 @@ namespace GenerallyPositive
             DarkMode = 1 << 1, // 2^1 = 2
             GoogleReferrer = 1 << 2, // 2^2 = 4
             PatchDriver = 1 << 4, // 2^4 = 16 - patches the active driver binary (chromedriver or msedgedriver)
-            // these create but don't seem to have any effect
+            // GenerateFakeCookies has no effect on the browser, so it is not offered
             //GenerateFakeCookies = 1 << 5, // generate fake cookies when creating the temporary chrome profile
         }
         /// <summary>
@@ -519,7 +519,7 @@ namespace GenerallyPositive
         #endregion <BrowserEnums>
         #region <DatabaseEnums>
         /// <summary>
-        /// What type of database is being accessed?
+        /// The type of database being accessed.
         /// </summary>
         public enum DatabaseType {  NotSet, SQLServer }
         /// <summary>
@@ -557,7 +557,6 @@ namespace GenerallyPositive
             SplitterMoved,
             TextChanged,
             ValueChanged,
-            // extend as needed
         }
         #endregion <FormControlEnums>
         #region Credential Enums
@@ -650,10 +649,10 @@ namespace GenerallyPositive
         {
             Back,                       // history.back()
             CaptureVisibleTab,
-            CastDesktop,                // NOTE: since we use these endpoints for puppeteer and rest, these must stay but are not availahble to rest
-            CastTab,                    // NOTE: since we use these endpoints for puppeteer and rest, these must stay but are not availahble to rest
+            CastDesktop,                // Puppeteer uses this endpoint; the REST API does not offer it
+            CastTab,                    // Puppeteer uses this endpoint; the REST API does not offer it
             CheckNetworkIdle,           // ensure no more than 'maxConnections' are active - better than document.readyState in some scenarios
-            CheckStatus,                // same as getreadystatus, not sure why we have two...
+            CheckStatus,                // same as GetReadyStatus
             ClearReferrer,
             CloseBrowser,
             CloseTab,
@@ -693,7 +692,7 @@ namespace GenerallyPositive
             GetReadyStatus,
             GetStatusCode,              // HTTP status of the active tab's page
             GetSettings,
-            GetShadowRoot,  // NOTE: CAVEAT: this may not make any sense
+            GetShadowRoot,
             GetLanguages,
             CaptureCalls,               // start or stop recording what the page asks for
             GetCapturedCalls,           // everything recorded so far, oldest first
@@ -786,7 +785,6 @@ namespace GenerallyPositive
         {
             Json,
             UrlEncoded
-            // Add more (e.g., MultipartFormData, Xml, Text) if needed later
         }
         #endregion REST API
         #region AI
@@ -2157,7 +2155,6 @@ namespace GenerallyPositive
         }
         #endregion Cryptography
         #region GPAL URL
-        // written by grok, modified by mbv
         /// <summary>
         /// Browser storage mechanism targeted by a website storage operation.
         /// </summary>

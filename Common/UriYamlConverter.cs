@@ -49,13 +49,13 @@ public class UriYamlConverter : IYamlTypeConverter
     {
         if (value == null)
         {
-            // Return null for a null value; one null Uri stopped the whole conversion.
+            // Write null for a null value, so one null Uri does not stop the conversion.
             emitter.Emit(new Scalar("null"));
         }
         else
         {
             var uri = (Uri)value;
-            emitter.Emit(new Scalar(null, null, uri.ToString())); // Emit the Uri as a string
+            emitter.Emit(new Scalar(null, null, uri.OriginalString)); // the text it was made from, as every format writes it
         }
     }
 
@@ -69,9 +69,45 @@ public class UriYamlConverter : IYamlTypeConverter
         {
             var uri = (Uri)value;
             // Use the serializer to emit the Uri as a string
-            serializer(uri.ToString(), typeof(string));
+            serializer(uri.OriginalString, typeof(string));
         }
     }
 
+}
+
+// A class that has a converter to and from text, such as a Font or a CultureInfo, or a struct of the framework that has
+// one, such as a System.Drawing.Point, is written as one value, its converter's text, "Arial, 9.75pt, style=Bold",
+// "de-DE" or "3, 4", and read back through that converter
+internal class TextConverterYamlConverter : IYamlTypeConverter
+{
+    public bool Accepts(Type type)
+    {
+        return true == GenerallyPositive.ConverterHelper.IsTextClassType(type) || true == GenerallyPositive.ConverterHelper.IsTextStructType(type);
+    }
+
+    public object ReadYaml(IParser parser, Type type)
+    {
+        string text = parser.Consume<Scalar>().Value;
+        return "null" == text || "~" == text || "" == text ? null : System.ComponentModel.TypeDescriptor.GetConverter(type).ConvertFromInvariantString(text);   // a null is written null
+    }
+
+    public object ReadYaml(IParser parser, Type type, ObjectDeserializer rootDeserializer)
+    {
+        string text = parser.Consume<Scalar>().Value;
+        return "null" == text || "~" == text || "" == text ? null : System.ComponentModel.TypeDescriptor.GetConverter(type).ConvertFromInvariantString(text);   // a null is written null
+    }
+
+    public void WriteYaml(IEmitter emitter, object value, Type type)
+    {
+        emitter.Emit(null == value ? new Scalar("null") : new Scalar(null, null, System.ComponentModel.TypeDescriptor.GetConverter(type).ConvertToInvariantString(value)));
+    }
+
+    public void WriteYaml(IEmitter emitter, object value, Type type, ObjectSerializer serializer)
+    {
+        if (null == value)
+            emitter.Emit(new Scalar("null"));   // a null-valued scalar renders as '' which does not read back as null
+        else
+            serializer(System.ComponentModel.TypeDescriptor.GetConverter(type).ConvertToInvariantString(value), typeof(string));
+    }
 }
 

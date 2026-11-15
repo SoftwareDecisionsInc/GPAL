@@ -23,7 +23,6 @@ namespace GenerallyPositive
 {
     internal class ExcelHelper
     {
-        // Existing methods unchanged
         internal static void TokenizeExcelFile(GPALFile gPALFile)
         {
             foreach (string filename in gPALFile.Filenames)
@@ -154,16 +153,15 @@ namespace GenerallyPositive
             }
         }
 
-        // New concrete class for comparison results
+        // One cell that differs between two ranges
         public class CellDifference
         {
             public string CellAddress { get; set; }
             public string OldValue { get; set; }
             public string NewValue { get; set; }
-            public string SourceRange { get; set; } // New: Tracks the source range
-            public string TargetRange { get; set; } // New: Tracks the target range
+            public string SourceRange { get; set; } // the source range
+            public string TargetRange { get; set; } // the target range
         }
-        // New methods using XLWorkbook and concrete objects
 
         /// <summary>
         /// Compares two data ranges and returns differences.
@@ -332,17 +330,19 @@ namespace GenerallyPositive
         /// Reconstructs an XLSX file from the tokenized grid and metadata that was created during parsing.
         /// </summary>
         /// <param name="outputPath">Full path where the new Excel file will be saved.</param>
-        /// <param name="grid">The full tokenized grid (all sheets concatenated, header rows already removed if FirstLineIsColumnHeaders was true).</param>
-        /// <param name="rowsPerSheet">Number of data rows per sheet (List&lt;int&gt; from FileSettings.ExcelRowsPerSheet).</param>
-        /// <param name="columnNamesPerSheet">Column names for each sheet (List&lt;List&lt;string&gt;&gt; from myConverterSettings.ColumnNames).</param>
+        /// <param name="grid">The full tokenized grid, all sheets concatenated.</param>
+        /// <param name="rowsPerSheet">Number of rows per sheet, its header line included (List&lt;int&gt; from FileSettings.ExcelRowsPerSheet).</param>
+        /// <param name="columnNamesPerSheet">Column names for each sheet; a sheet with none takes its header line.</param>
         /// <param name="sheetNames">Original sheet names (optional). If null or not enough entries, generic names will be used.</param>
-        /// <param name="writeHeaders">If true, the column header row will be written to each sheet.</param>
+        /// <param name="gridHasHeaderLines">True when each sheet in the grid starts with its header line. The header line is never written as a row; a header written takes its place.</param>
+        /// <param name="writeHeaders">If true, the column header row will be written to each sheet that has names or a header line.</param>
         public static void WriteXlsxFromTokenizedData(
             string outputPath,
             IGPALGrid<string> grid,
             List<int> rowsPerSheet,
             IGPALGrid<string> columnNamesPerSheet,
             List<string> sheetNames,
+            bool gridHasHeaderLines,
             bool writeHeaders = true)
         {
             if (grid == null) throw new ArgumentNullException(nameof(grid));
@@ -351,15 +351,9 @@ namespace GenerallyPositive
 
             using var workbook = new XLWorkbook();
 
-            // A grid not read from a workbook has no sheet layout. Treat it as one sheet whose first row is the column
-            // names; otherwise saving throws.
+            // A grid not read from a workbook has no sheet layout. Treat it as one sheet; otherwise saving throws.
             if (0 == rowsPerSheet.Count && 0 < grid.Rows)
-            {
                 rowsPerSheet = new List<int> { grid.Rows };
-
-                if (0 == columnNamesPerSheet.Rows)
-                    columnNamesPerSheet.AddRow(new List<string>(grid[0]));
-            }
 
             int currentRowInGrid = 0;
 
@@ -368,7 +362,46 @@ namespace GenerallyPositive
                 int totalRowsThisSheet = rowsPerSheet[sheetIdx];
                 if (totalRowsThisSheet == 0) continue;
 
-                var columnNames = columnNamesPerSheet[sheetIdx];
+                // The header written is the sheet's names, else the header line it starts with; a sheet with neither
+                // gets none. The header line is never written as a row, as a csv output leaves it out when no header is written.
+                bool sheetHasNames = sheetIdx < columnNamesPerSheet.Rows;
+                bool writeSheetHeader = true == writeHeaders && (true == sheetHasNames || true == gridHasHeaderLines);
+                int startOffset = true == gridHasHeaderLines ? 1 : 0;
+
+                // A sheet with no column names takes its header line, or with no header written as many columns as its
+                // widest row. They stay this sheet's own, so the next file or sheet does not get them.
+                List<string> columnNames;
+
+                if (true == sheetHasNames)
+                    columnNames = columnNamesPerSheet[sheetIdx];
+                else if (true == writeSheetHeader)
+                    columnNames = new List<string>(grid[currentRowInGrid]);
+                else
+                {
+                    int widestRow = 0;
+
+                    for (int rowIdx = currentRowInGrid + startOffset; rowIdx < currentRowInGrid + totalRowsThisSheet; rowIdx++)
+                        widestRow = Math.Max(widestRow, grid[rowIdx].Count);
+
+                    columnNames = Enumerable.Repeat(string.Empty, widestRow).ToList();
+                }
+
+                // a header with fewer names than the sheet's widest row gets names made for the other columns, so
+                // every value is written
+                if (true == writeSheetHeader)
+                {
+                    int widestDataRow = 0;
+
+                    for (int rowIdx = currentRowInGrid + startOffset; rowIdx < currentRowInGrid + totalRowsThisSheet; rowIdx++)
+                        widestDataRow = Math.Max(widestDataRow, grid[rowIdx].Count);
+
+                    if (columnNames.Count < widestDataRow)
+                    {
+                        int namedCount = columnNames.Count;
+                        columnNames = ConverterHelper.NamesForWidth(columnNames, widestDataRow);
+                        GPAL.PublishSimpleEvent(Enums.GPALEventType.WARNING, $"[{outputPath}] has [{namedCount}] column names for [{widestDataRow}] columns, so the others are named [{string.Join(",", columnNames.Skip(namedCount))}]", columnNamesPerSheet, Enums.GPALObjectType.Other);
+                    }
+                }
 
                 string sheetName = sheetNames != null && sheetIdx < sheetNames.Count
                     ? sheetNames[sheetIdx]
@@ -379,7 +412,7 @@ namespace GenerallyPositive
                 int destRow = 1;
 
                 // Header
-                if (writeHeaders)
+                if (true == writeSheetHeader)
                 {
                     for (int col = 0; col < columnNames.Count; col++)
                         worksheet.Cell(1, col + 1).Value = columnNames[col];
@@ -388,10 +421,8 @@ namespace GenerallyPositive
                     destRow = 2;
                 }
 
-                int startOffset = writeHeaders ? 1 : 0;
                 int dataRowsToWrite = totalRowsThisSheet - startOffset;
 
-                // === THIS IS THE ONLY IMPORTANT CHANGE ===
                 for (int i = 0; i < dataRowsToWrite; i++)
                 {
                     var sourceRow = grid[currentRowInGrid + startOffset + i];
@@ -411,6 +442,21 @@ namespace GenerallyPositive
                     worksheet.Columns(1, columnNames.Count).AdjustToContents();
 
                 currentRowInGrid += totalRowsThisSheet;
+            }
+
+            // A workbook holds at least one sheet, so input with no rows writes one empty sheet, with the header when
+            // names are given for it
+            if (0 == workbook.Worksheets.Count)
+            {
+                var emptySheet = workbook.Worksheets.Add(null != sheetNames && 0 < sheetNames.Count ? sheetNames[0] : "Sheet1");
+
+                if (true == writeHeaders && 0 < columnNamesPerSheet.Rows)
+                {
+                    for (int col = 0; col < columnNamesPerSheet[0].Count; col++)
+                        emptySheet.Cell(1, col + 1).Value = columnNamesPerSheet[0][col];
+
+                    emptySheet.Row(1).Style.Font.Bold = true;
+                }
             }
 
             FileHelper.EnsureFolderFor(outputPath);

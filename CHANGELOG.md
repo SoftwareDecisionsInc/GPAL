@@ -2,6 +2,50 @@
 
 Every release of GPAL and GPAL.Image, newest first. The two are released together at the same version.
 
+## 2.0 (planned)
+
+Changes that would break a working program wait for 2.0. Everything below still works through 1.x.
+
+- Close(bool) is removed; call Close()
+- BrowserHelper.KillAllRunningProcesses(bool, IBrowser) is removed; call KillAllRunningProcesses(IBrowser)
+
+## 1.1.0
+
+### GPAL
+
+#### Changed
+
+- Close() ends the browser and its web driver; Release() leaves a browser running
+- A selector string is read as CSS or XPath, never both
+
+#### Deprecated
+
+- Close(bool) and KillAllRunningProcesses(bool, IBrowser)
+
+#### Removed
+
+- WithCDPDebugPipe; use AutomationEngine.PuppeteerPipe
+
+#### Added
+
+- .NET 10 build beside the .NET Framework 4.8 build
+- Archives open like folders; GPALFile.SaveTo writes zip, gz, tar and 7z
+- GPAL.Notify: Slack, Teams, Discord, Google Chat, Telegram, ntfy or any webhook
+- Clipboard in and out on browsers and applications
+- Applications wait, match and search as browsers do
+
+#### Fixed
+
+- Hidden desktops, tabs and windows on every engine
+- Many converter fixes: any format converts to any other without losing data
+- Smaller fixes to REST, database parameters and file reading
+
+### GPAL.Image
+
+#### Added
+
+- .NET 10 build beside the .NET Framework 4.8 build
+
 ## 1.0.2
 
 ### GPAL

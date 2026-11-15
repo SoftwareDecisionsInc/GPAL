@@ -16,7 +16,7 @@
 
 using System;
 using System.Collections.Generic;
-using System.Data.SqlClient;
+using Microsoft.Data.SqlClient;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -153,8 +153,10 @@ namespace GenerallyPositive
         { 
             get
             {
-                DatabaseSettings.ParametersList?.Clear();
-                DatabaseSettings.ParametersGrid?.Clear();
+                // drops the values without emptying a grid the caller handed over
+                DatabaseSettings.ParametersList = new List<string>();
+                DatabaseSettings.ParametersGrid = null;
+                DatabaseSettings.ParametersUsedAt = null;
 
                 return this;
             }
@@ -289,7 +291,7 @@ namespace GenerallyPositive
         }
         /// <summary>
         /// Add a parameter name to the parameter names list.<br/>
-        /// CAVEAT: we need to know the type of parameter, this gets as tedious as the columns
+        /// CAVEAT: a parameter added by name carries no type; its value is sent as text and the server converts it
         /// </summary>
         /// <param name="parameterName">The stored procedure parameter</param>
         /// <returns>Fluent interface to define more database settings</returns>
@@ -305,7 +307,14 @@ namespace GenerallyPositive
         /// <returns>Fluent interface to define more database settings</returns>
         public IAllowParametersAndActions WithParameter(string parameter)
         {
-            // TODO: if datbase action already called, clear the parms
+            // a parameter added after an action ran starts a new set, so the values that action used do not go out
+            // with it. Until a parameter is added, the values stay, and the next action runs with them again
+            if (null != DatabaseSettings.ParametersUsedAt)
+            {
+                DatabaseSettings.ParametersList = new List<string>();
+                DatabaseSettings.ParametersGrid = null;
+                DatabaseSettings.ParametersUsedAt = null;
+            }
             DatabaseSettings.ParametersList.Add(parameter);
             return this;
         }
@@ -316,28 +325,27 @@ namespace GenerallyPositive
         /// <returns>Fluent interface to define more database settings</returns>
         public IAllowParametersAndActions WithParameterGrid(IGPALGrid<string> parametersGrid)
         {
+            // the grid is the whole set: values added before it do not go out; a write from a grid with no rows runs nothing, and a read runs with no parameters
             DatabaseSettings.ParametersGrid = parametersGrid;
+            DatabaseSettings.ParametersList = new List<string>();
+            DatabaseSettings.ParametersUsedAt = null;
             return this;
         }
-        // TODO: figure out fluent syntax for using the underlying sql
         public IAllowDatabaseSettings WithCreateAs(string sqlCommand)
         {
             DatabaseSettings.CreateSQL = sqlCommand;
             return this;
         }
-        // TODO: figure out fluent syntax for using the underlying sql
         public IAllowDatabaseSettings WithReadAs(string sqlCommand)
         {
             DatabaseSettings.ReadSQL = sqlCommand;
             return this;
         }
-        // TODO: figure out fluent syntax for using the underlying sql
         public IAllowDatabaseSettings WithUpdateAs(string sqlCommand)
         {
             DatabaseSettings.UpdateSQL = sqlCommand;
             return this;
         }
-        // TODO: figure out fluent syntax for using the underlying sql
         public IAllowDatabaseSettings WithDeleteAs(string sqlCommand)
         {
             DatabaseSettings.DeleteSQL = sqlCommand;
@@ -724,14 +732,20 @@ namespace GenerallyPositive
         }
         public IAllowDatabaseExecute Using(IGPALGrid<string> parametersGrid)
         {
+            // the grid is the whole set: values added before it do not go out; a write from a grid with no rows runs nothing, and a read runs with no parameters
             DatabaseSettings.ParametersGrid = parametersGrid;
+            DatabaseSettings.ParametersList = new List<string>();
+            DatabaseSettings.ParametersUsedAt = null;
             return this;
         }
 
         public IAllowDatabaseExecute Using(DataTable dataTable)
         {
             IGPALGrid<string> parametersGrid = DatabaseHelper.DataTableToGrid(dataTable, out List<DatabaseSettings.DatabaseColumn> columns);
+            // the table's rows are the whole set, as for a grid
             DatabaseSettings.ParametersGrid = parametersGrid;
+            DatabaseSettings.ParametersList = new List<string>();
+            DatabaseSettings.ParametersUsedAt = null;
             DatabaseSettings.ColumnList = columns;
             return this;
         }
@@ -739,6 +753,7 @@ namespace GenerallyPositive
         public IAllowDatabaseGridSettings SaveTo(out IGPALGrid<string> dataGrid)
         {
             DatabaseHelper.GetGrid(DatabaseSettings, out dataGrid);
+            DatabaseSettings.ParametersUsedAt = DateTime.Now;
             return this;
         }
 
@@ -751,12 +766,14 @@ namespace GenerallyPositive
         public IAllowDatabaseSettings SaveTo(out DataTable dataTable)
         {
             DatabaseHelper.GetDataTable(DatabaseSettings, out dataTable);
+            DatabaseSettings.ParametersUsedAt = DateTime.Now;
             return this;
         }
 
         public IAllowDatabaseSettings SaveTo(out DataSet dataSet)
         {
             DatabaseHelper.GetDataSet(DatabaseSettings, out dataSet);
+            DatabaseSettings.ParametersUsedAt = DateTime.Now;
             return this;
         }
 
@@ -777,31 +794,34 @@ namespace GenerallyPositive
         public IAllowDatabaseSettings SaveTo(out string value)
         {
             DatabaseHelper.GetScalar(DatabaseSettings, out value);
+            DatabaseSettings.ParametersUsedAt = DateTime.Now;
             return this;
         }
 
         public IAllowParametersAndActions Execute(out int rowCount)
         {
             rowCount = DatabaseHelper.ExecuteSQL(DatabaseSettings, DatabaseHelper.BuildWriteStatement(DatabaseSettings), ParameterTokens());
+            DatabaseSettings.ParametersUsedAt = DateTime.Now;
             return this;
         }
 
         public IAllowParametersAndActions Execute(out List<int> rowCountsPerStatement)
         {
             DatabaseHelper.ExecuteSQL(DatabaseSettings, DatabaseHelper.BuildWriteStatement(DatabaseSettings), ParameterTokens(), out rowCountsPerStatement);
+            DatabaseSettings.ParametersUsedAt = DateTime.Now;
             return this;
         }
 
         /// <summary>
-        /// Returns the parameter rows: the grid from .Using or .WithParameterGrid, otherwise one row from the
-        /// parameters added one at a time.
+        /// Returns the parameter rows: the grid from .Using or .WithParameterGrid, even one with no rows, otherwise one
+        /// row from the parameters added one at a time.
         /// </summary>
         /// <returns>The rows the command runs against</returns>
         private IGPALGrid<string> ParameterTokens()
         {
             IGPALGrid<string> retVal = DatabaseSettings.ParametersGrid;
 
-            if (null == retVal || 0 == retVal.Rows)
+            if (null == retVal)
             {
                 Tokens.Clear();
                 Tokens.AddRow(DatabaseSettings.ParametersList);

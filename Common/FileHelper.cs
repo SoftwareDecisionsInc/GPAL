@@ -52,13 +52,13 @@ namespace GenerallyPositive
     public class FileHelper
     {
         // Suppress repeat log messages (e.g. the "no delimiter set" notice fires once per parsed line - identical
-        // every time). We publish a given message once, then emit a single "Supressing repeat messages" notice.
+        // every time). We publish a given message once, then emit a single "Suppressing repeat messages" notice.
         private static readonly HashSet<string> _loggedMessages = new HashSet<string>();
         private static bool _suppressNoticeShown = false;
 
         /// <summary>
         /// Publishes <paramref name="message"/> only the first time it is seen; on any later repeat it emits a
-        /// single "Supressing repeat messages" notice and then stays silent, mirroring the app-side helper.
+        /// single "Suppressing repeat messages" notice and then stays silent, mirroring the app-side helper.
         /// </summary>
         private static void PublishSuppressingRepeats(GPALEventType type, string message, object source, GPALObjectType objectType)
         {
@@ -66,9 +66,38 @@ namespace GenerallyPositive
                 GPAL.PublishSimpleEvent(type, message, source, objectType);
             else if (false == _suppressNoticeShown)
             {
-                GPAL.PublishSimpleEvent(GPALEventType.INFO, "Supressing repeat messages", source, objectType);
+                GPAL.PublishSimpleEvent(GPALEventType.INFO, "Suppressing repeat messages", source, objectType);
                 _suppressNoticeShown = true;
             }
+        }
+        /// <summary>
+        /// A file's own entry of a per-file setting, or the value for none when its unit gave none.
+        /// </summary>
+        /// <param name="settings">The setting's entries, one per file</param>
+        /// <param name="fileIdx">The file's index in the GPALFile</param>
+        /// <param name="noSetting">The value when no entry was given</param>
+        private static bool SettingForFile(List<bool> settings, int fileIdx, bool noSetting)
+        {
+            return fileIdx < settings.Count ? settings[fileIdx] : noSetting;
+        }
+        /// <summary>
+        /// A file's own delimiter, else the delimiter its format names, a tab for a .tsv. Null when neither applies, as
+        /// for a .txt, .log or unknown file given none.
+        /// </summary>
+        /// <param name="fileSettings">The GPALFile's settings</param>
+        /// <param name="fileIdx">The file's index in the GPALFile</param>
+        /// <param name="inDataFormat">The file's format</param>
+        private static char? DelimiterForFile(GPALFileSettings fileSettings, int fileIdx, DataFormat inDataFormat)
+        {
+            List<char?> delimiters = fileSettings.Delimiter;
+            char? delimiter = null;
+
+            if (fileIdx < delimiters.Count && true == delimiters[fileIdx].HasValue)
+                delimiter = delimiters[fileIdx];
+            else if (true == ConverterHelper.IsDelimitedDataFormat(inDataFormat) && DataFormat.CUSTOM_DELIMITER != inDataFormat)
+                delimiter = ConverterHelper.GetDelimiterFromFormat(inDataFormat);
+
+            return delimiter;
         }
 
         /// <summary>
@@ -89,6 +118,8 @@ namespace GenerallyPositive
             foreach (string filename in fileSettings.Filenames)
                 try
                 {
+                    // each file gets a grid of its own, so one file's rows are not listed again with the next
+                    myGrid = GPAL.Grid.ToGPALObject();
                     string directory = Path.GetDirectoryName(filename);
                     string filenamepart = Path.GetFileName(filename);
                     if (true == File.Exists(filename))
@@ -102,23 +133,24 @@ namespace GenerallyPositive
                                 {
                                     while (null != (currentLine = streamReader?.ReadLine()))    // get one line
                                     {
-                                        if (false == firstLineSkipped && 0 < fileSettings.IgnoreFirstLineColumnNames.Count && fileSettings.IgnoreFirstLineColumnNames[0])    // CAVEAT: hardcoded value (but we always have one file now)
+                                        if (false == firstLineSkipped && true == SettingForFile(fileSettings.IgnoreFirstLineColumnNames, fileIdx, false))
                                         {
                                             firstLineSkipped = true;
                                             continue;
                                         }
                                         List<string> currentRow = new List<string>();
+                                        char? fileDelim = DelimiterForFile(fileSettings, fileIdx, ConverterHelper.GetDataFormatFromExtension(filename2));
                                         char delim;
 
-                                        if (0 < fileSettings.Delimiter.Count && true == fileSettings.Delimiter[fileIdx].HasValue)
-                                            delim = fileSettings.Delimiter[fileIdx].Value;
+                                        if (true == fileDelim.HasValue)
+                                            delim = fileDelim.Value;
                                         else
                                         {
                                             PublishSuppressingRepeats(GPALEventType.INFO, $"[{filename}] has no delimiter set, using comma.", fileSettings, GPALObjectType.FileSettings);
                                             delim = ',';
                                         }
 
-                                        foreach (string token in ConverterHelper.SplitRespectingQuotes(currentLine, delim))   // parse tokens and add to our grid, quote-aware so embedded delimiters/commas inside a quoted field don't split it
+                                        foreach (string token in ConverterHelper.SplitRespectingQuotes(currentLine, delim))   // parse tokens and add to our grid; a delimiter inside a quoted token stays in it
                                             currentRow.Add(token);
 
                                         myGrid.AddRow(currentRow);  // add row to our grid
@@ -193,15 +225,13 @@ namespace GenerallyPositive
             }
             else if (true == System.IO.File.Exists(fullFilePath))
             {
-                string baseName = Path.GetFileNameWithoutExtension(filename);
-                string extension = Path.GetExtension(filename);
+                string baseName = NameWithoutExtension(filename, out string extension);
 
                 if (Enums.NextFilePattern.Counter == nextFilePattern || Enums.NextFilePattern.CounterPadded == nextFilePattern)
                 {
-                    // Seed the counter once from the highest existing "<base>_<n><ext>" via a single directory
-                    // listing rather than probing _0001, _0002 ... one File.Exists at a time. This is O(1) syscalls
-                    // per call after seeding, and (unlike a contiguous binary probe) stays correct when the numbering
-                    // has gaps from deleted files. Zero means "not seeded yet"; the caller persists it thereafter.
+                    // Seed the counter once from the highest existing "<base>_<n><ext>" in one directory listing. It
+                    // stays correct when deleted files leave gaps in the numbering. Zero means not seeded yet; the caller
+                    // keeps the value after that.
                     if (0 == patternCounter)
                         patternCounter = HighestCounterIndex(currentDirectory, baseName, extension);
 
@@ -240,7 +270,7 @@ namespace GenerallyPositive
 
                 foreach (string path in Directory.EnumerateFiles(searchDir, searchPattern))
                 {
-                    string name = Path.GetFileNameWithoutExtension(path);   // <base>_<digits>
+                    string name = NameWithoutExtension(path, out _);   // <base>_<digits>, .csv.gz taken off whole
                     int underscore = name.LastIndexOf('_');
                     if (0 > underscore || underscore + 1 >= name.Length)
                         continue;
@@ -262,7 +292,7 @@ namespace GenerallyPositive
         /// <see cref="GPALFile.Next"/> generates a new unique filename. The counter patterns advance
         /// <paramref name="counter"/> so each call produces a distinct value.
         /// </summary>
-        private static string NextFileSuffix(Enums.NextFilePattern pattern, ref int counter)
+        internal static string NextFileSuffix(Enums.NextFilePattern pattern, ref int counter)
         {
             switch (pattern)
             {
@@ -405,7 +435,6 @@ namespace GenerallyPositive
             {
                 downloadUrl = element.GetAttribute("src");
             }
-            // Add more conditions for other types of elements as needed...
 
             // An attribute holds the url as written, often relative ("/a/b.zip"). The browser resolves it against the
             // page it is on, and so does this; Selenium already hands back the resolved one, which stays as it is.
@@ -447,7 +476,7 @@ namespace GenerallyPositive
             watcher.Filter = "*.*";
             watcher.EnableRaisingEvents = true;
 
-            // Add Created (often fires for temp file start)
+            // Created often fires when the temporary file starts
             watcher.Created += (sender, e) => handleFile(sender, e, downloadDirectory, fullFilePathToSave);
             watcher.Changed += (sender, e) => handleFile(sender, e, downloadDirectory, fullFilePathToSave);
             watcher.Renamed += (sender, e) => handleFile(sender, e, downloadDirectory, fullFilePathToSave);
@@ -488,7 +517,7 @@ namespace GenerallyPositive
                     if (e.Name.EndsWith(".crdownload") || e.Name.EndsWith(".part"))
                     {
                         string filename = e.Name.Replace(".crdownload", "").Replace(".part", "");
-                        string fullSavedFilePath = Path.Combine(downloaddirectory, filename);  // Safer path building
+                        string fullSavedFilePath = Path.Combine(downloaddirectory, filename);
 
                         string pattern = @"^downloads(?:\.htm|\s*\(\d+\)\.htm|\.htm\s*\(\d+\))$";
                         if (Regex.IsMatch(filename, pattern, RegexOptions.IgnoreCase))
@@ -502,7 +531,7 @@ namespace GenerallyPositive
                         // disable events temporarily to avoid duplicate calls during wait
                         // watcher.EnableRaisingEvents = false;
 
-                        // first check and wait for the crdownload file to finish, which might finish before we even call, so it never finds it...
+                        // Wait for the .crdownload file to finish. It can finish before this check, and then it is not found.
                         if (true == File.Exists(Path.Combine(downloaddirectory, e.Name)))
                             actualDownloadedFilename = WaitForDownloadToFinish(Path.Combine(downloaddirectory, e.Name), browserSettings.DownloadTimeoutInSec);
 
@@ -608,7 +637,6 @@ namespace GenerallyPositive
 
         /// <summary>
         /// wait for a file to finish downloading by checking to see the file size grows
-        /// TODO: refactor to just try to open the file, on exception delay a second. assumes the browser has it locked writing to it
         /// </summary>
         /// <param name="filePath">Path of the file being downloaded</param>
         /// <param name="downloadTimeoutInSec">Seconds to wait for the download</param>
@@ -621,9 +649,7 @@ namespace GenerallyPositive
 
             newSize = WaitForFileToDownload(filePath, downloadTimeoutInSec, size, out downloadedFilename);   // -1 return if timed out waiting for file to exist (not completed)
 
-            // KLUDGE: file showed up but is zero bytes, this could be correct, but let's give an extra second and wait
-            // NOTE: hardcoded value - not really in favor of hard sleeps during the workflow espcially since the download has started, but maybe it's slow for some reason
-            // our file checks can run very quuckly
+            // KLUDGE: a zero-byte file can be correct; wait one more second (hardcoded) before reading the size again
             if (0 == newSize)
                 System.Threading.Thread.Sleep(1_000);
             else if (-1 == newSize)
@@ -636,24 +662,22 @@ namespace GenerallyPositive
 
             size = newSize;
 
-            // NOTE: this is prolly really overkill, essentially checking multiple times for completion
+            // Read the size until two reads agree.
             do
             {
                 if (0 <= (newSize = WaitForFileToDownload(filePath, downloadTimeoutInSec, newSize, out downloadedFilename)))
                 {
-                    // NOTE: new scenario, race condition, if file starts download then chrome renames, we get -1 and think it is not downloaded
+                    // CAVEAT: when Chrome renames the file after the download starts, a later read returns -1; fileStarted records that the download was seen
                     fileStarted = true;
 
-                    // KLUDGE: file showed up but is zero bytes, this could be correct, but let's give an extra second and wait
-                    // NOTE: hardcoded value - not really in favor of hard sleeps during the workflow espcially since the download has started, but maybe it's slow for some reason
-                    // our file checks can run very quuckly
+                    // KLUDGE: a zero-byte file can be correct; wait one more second (hardcoded) before reading the size again
                     if (0 == newSize)
                         System.Threading.Thread.Sleep(1_000);
 
                     // Wait between the two size reads, or a part-written file looks finished.
                     System.Threading.Thread.Sleep(DownloadSizeSampleMs);
 
-                    if (size == (newSize = WaitForFileToDownload(filePath, downloadTimeoutInSec, newSize, out downloadedFilename)))  // NOTE: ensure the filesize stays the same (prolly overkill)
+                    if (size == (newSize = WaitForFileToDownload(filePath, downloadTimeoutInSec, newSize, out downloadedFilename)))  // the size must not change between reads
                         break;
                     else
                         size = newSize;
@@ -668,14 +692,14 @@ namespace GenerallyPositive
                     GPAL.PublishSimpleEvent(GPALEventType.INFO, $"File [{downloadedFilename ?? filePath}] downloaded as zero bytes", null, GPALObjectType.None);
                 else if (-1 == newSize && false == fileStarted)
                     GPAL.PublishSimpleEvent(GPALEventType.INFO, $"File [{downloadedFilename ?? filePath}] NOT downloaded", null, GPALObjectType.None);
-                // NOTE: if -1 and file started, we have a race condition where the file was renamed, prolly by the browser - so ignore it, it's just a temp file
+                // -1 after the file started means the browser renamed it; the file seen was a temporary one, so it is ignored
             }
 
             return downloadedFilename;
         }
         internal static long WaitForFileToDownload(string filePath, int downloadTimeoutInSec, long size, out string downloadedFilename)
         {
-            TimeSpan timeout = TimeSpan.FromSeconds(downloadTimeoutInSec); // Adjust timeout as needed
+            TimeSpan timeout = TimeSpan.FromSeconds(downloadTimeoutInSec);
             DateTime startTime = DateTime.Now;
             bool fileExists = Directory.GetFiles(Path.GetDirectoryName(filePath), Path.GetFileName(filePath)).Length > 0;
             int lastPrinted = -1;  // so we print at ~30, 20, 10, 0
@@ -706,7 +730,7 @@ namespace GenerallyPositive
             while (false == fileExists && (DateTime.Now - startTime) < timeout)
             {
                 TimeSpan remaining = timeout - (DateTime.Now - startTime);
-                int remainingSec = (int)Math.Ceiling(remaining.TotalSeconds);  // or (int)remaining.TotalSeconds
+                int remainingSec = (int)Math.Ceiling(remaining.TotalSeconds);
 
                 // Print only when crossing a 10-second boundary (30>29, 20>19, etc.)
                 if (remainingSec % 10 == 0 && remainingSec != lastPrinted)
@@ -714,7 +738,6 @@ namespace GenerallyPositive
                     GPAL.PublishSimpleEvent(GPALEventType.DEBUG, $"Waiting up to [{remainingSec}] sec for [{filePath}].", null, GPALObjectType.None);
                     lastPrinted = remainingSec;     // once per boundary, and not again each time growth restarts the clock
                 }
-                // Sleep for a short interval before checking again
                 System.Threading.Thread.Sleep(1000); // Check every second
                 fileExists = Directory.GetFiles(Path.GetDirectoryName(filePath), Path.GetFileName(filePath)).Length > 0;
 
@@ -748,18 +771,18 @@ namespace GenerallyPositive
                     GPAL.PublishSimpleEvent(GPALEventType.DEBUG, $"File [{filePath}] never showed up.", null, GPALObjectType.None);
                     downloadedFilename = null;
                 }
-                else    // if we have a temp file, we actually detected it, so return it, it existed and next step will be to check the real filename
+                else    // a temporary file was seen, so return it; the next step checks the real filename
                     downloadedFilename = filePath;
 
                 return -1;
             }
 
-            // we got here in case a wildcard is passed in and we have multiple matching files
+            // Reached when a wildcard is passed in and several files match.
 
-            // use case: we expect a file dialog but the link downloads directly, so we have to figure it out post download
-            // as it will not download to the correct directory, so find where it downloads to and copy to the user specified directory.
-            // NOTE: CAVEAT: this depends upon the user supplied file extension which must match the expected download
-            var cutoff = DateTime.Now.AddMinutes(-2);   // NOTE: hardcoded value
+            // Use case: a file dialog is expected but the link downloads directly, into another folder. Find where it
+            // landed and copy it to the folder the user gave.
+            // CAVEAT: the file mask the user gives, extension included, must match the downloaded file
+            var cutoff = DateTime.Now.AddMinutes(-2);   // only files written in the last two minutes count
 
             string newest = null;
             DateTime newestTime = DateTime.MinValue;
@@ -771,7 +794,7 @@ namespace GenerallyPositive
             if (1 < filesFound.Count())
                 foreach (var f in filesFound)
                 {
-                    // we may have just run the auto-update, do not mistake one of these files for our download
+                    // skip the driver auto-update files; they are not the download
                     if (true == f.Equals(GPAL.GPALSettings.ChromeDriverZipFilename) ||
                          true == f.Equals(GPAL.GPALSettings.EdgeDriverFilename) ||
                          true == f.Equals(GPAL.GPALSettings.FirefoxDriverFilename))
@@ -807,9 +830,9 @@ namespace GenerallyPositive
             {
                 downloadedFilename = newest;
 
-                // Once the file exists, read its size. Opened for reading and sharing everything: an exclusive open,
-                // landing between two of the browser's writes, made the browser's next write fail and left the
-                // download stopped part way.
+                // Once the file exists, read its size. Open it for reading and share everything: an exclusive open,
+                // landing between two of the browser's writes, makes the browser's next write fail and stops the
+                // download part way.
                 try
                 {
                     using (FileStream fs = File.Open(downloadedFilename, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
@@ -877,7 +900,7 @@ namespace GenerallyPositive
         /// <returns>The configured download directory, or the Windows Downloads folder</returns>
         public static string GetChromeDefaultDownloadDirectory(string profilePath = null)
         {
-            // Default profile path (change "Default" to "Profile 1" etc. if using a different one)
+            // The Default profile when no profile path is given
             if (string.IsNullOrEmpty(profilePath))
             {
                 string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -917,7 +940,7 @@ namespace GenerallyPositive
         /// <returns>The configured download directory, or the Windows Downloads folder</returns>
         public static string GetEdgeDefaultDownloadDirectory(string profilePath = null)
         {
-            // Default profile path ("Default" folder; change to "Profile 1" etc. if needed)
+            // The Default profile when no profile path is given
             if (string.IsNullOrEmpty(profilePath))
             {
                 string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -1049,38 +1072,73 @@ namespace GenerallyPositive
         }
 
         /// <summary>
-        /// Load the file(s) definied in the File object and tokenize into a List&lt;GPALGrid&gt;
+        /// Load the file(s) definied in the File object and tokenize into a List&lt;GPALGrid&gt;, one grid per file,
+        /// as every workflow reads a file
         /// </summary>
         /// <param name="currentUOW">The unit of work the input file is attached to</param>
         /// <param name="inputFile">The GPAL File definition</param>
         internal static List<IGPALGrid<string>> TokenizeFile(UnitOfWork currentUOW, GPALFile inputFile)
         {
             currentUOW.InputFile = inputFile;
-            int rowCount = FileHelper.GetGrid(((IGPALFileInternal)inputFile).FileSettings, out List<IGPALGrid<string>> tokens);
-            return tokens;
+            TokenizeFile(inputFile);
+            return ((IGPALFileInternal)inputFile).TokenList;
+        }
+
+        /// <summary>
+        /// Reads a file one line at a time into a grid, one row per line, each line split on the delimiter. This is
+        /// how a workflow reads a delimited or text file.
+        /// </summary>
+        /// <param name="input">The open file</param>
+        /// <param name="delimiter">The character between the tokens of a line</param>
+        /// <param name="skipFirstLine">True to leave out the first line, a row of column names</param>
+        /// <returns>The grid of the file's lines</returns>
+        private static IGPALGrid<string> ReadLineGrid(StreamReader input, char delimiter, bool skipFirstLine)
+        {
+            IGPALGrid<string> grid = GPAL.Grid.ToGPALObject();
+            string line;
+            bool firstLine = true;
+
+            while (null != (line = input.ReadLine()))
+            {
+                if (false == (firstLine && skipFirstLine))
+                    grid.AddRow(ConverterHelper.SplitRespectingQuotes(line, delimiter));
+
+                firstLine = false;
+            }
+
+            return grid;
         }
 
         /// <summary>
         /// Load the file definied in the File object and tokenize it into the grid
         /// </summary>
         /// <param name="value">The value to collect dictionary keys from; nested keys are joined with a dot</param>
-        private static HashSet<string> CollectDictionaryKeys(object value)
+        /// <param name="path">The dictionaries being walked above this one. A YAML alias can put a mapping inside itself, as
+        /// Left: *T does; that member is one key, as ProcessDictionaryValue writes it as one value</param>
+        private static HashSet<string> CollectDictionaryKeys(object value, HashSet<object> path = null)
         {
             var keys = new HashSet<string>();
+
+            if (null == path)
+                path = new HashSet<object>(ConverterHelper.ReferenceEqualityComparer.Instance);
+
+            path.Add(value);
+
             if (value is IList<object> list)
             {
                 foreach (var item in list)
                 {
                     if (item is IDictionary dynamicDict)
                     {
+                        path.Add(dynamicDict);
                         foreach (dynamic entry in dynamicDict)
                         {
                             string key = entry.Key?.ToString();
                             if (key != null)
                             {
-                                if (entry.Value is IDictionary nestedDict)
+                                if (entry.Value is IDictionary nestedDict && false == path.Contains(nestedDict))
                                 {
-                                    foreach (string nestedKey in CollectDictionaryKeys(nestedDict))
+                                    foreach (string nestedKey in CollectDictionaryKeys(nestedDict, path))
                                     {
                                         keys.Add($"{key}.{nestedKey}");
                                     }
@@ -1091,6 +1149,7 @@ namespace GenerallyPositive
                                 }
                             }
                         }
+                        path.Remove(dynamicDict);
                     }
                 }
             }
@@ -1101,9 +1160,9 @@ namespace GenerallyPositive
                     string key = entry.Key?.ToString();
                     if (key != null)
                     {
-                        if (entry.Value is IDictionary nestedDict)
+                        if (entry.Value is IDictionary nestedDict && false == path.Contains(nestedDict))
                         {
-                            foreach (string nestedKey in CollectDictionaryKeys(nestedDict))
+                            foreach (string nestedKey in CollectDictionaryKeys(nestedDict, path))
                             {
                                 keys.Add($"{key}.{nestedKey}");
                             }
@@ -1115,7 +1174,149 @@ namespace GenerallyPositive
                     }
                 }
             }
+
+            path.Remove(value);
             return keys;
+        }
+
+        /// <summary>
+        /// The text a YAML mapping key is read as. A key that is a list or a mapping, as ? [k] writes, becomes its YAML flow
+        /// text, [k] or {a: 1}, so it names a column as a plain key does.
+        /// </summary>
+        /// <param name="key">The key YamlDotNet read</param>
+        /// <returns>The key as text</returns>
+        internal static string YamlKeyText(object key)
+        {
+            string text;
+
+            if (null == key)
+                text = "null";
+            else if (key is IDictionary keyMapping)
+                text = "{" + string.Join(", ", keyMapping.Keys.Cast<object>().Select(k => YamlKeyText(k) + ": " + YamlKeyText(keyMapping[k]))) + "}";
+            else if (key is IList keyList)
+                text = "[" + string.Join(", ", keyList.Cast<object>().Select(YamlKeyText)) + "]";
+            else if (key is bool flag)
+                text = true == flag ? "true" : "false";
+            else if (key is IFormattable number)
+                text = number.ToString(null, System.Globalization.CultureInfo.InvariantCulture);
+            else
+                text = key.ToString();
+
+            return text;
+        }
+
+        /// <summary>
+        /// Reads a plain YAML scalar going into an object, as every value of a YAML file or string does, by the YAML 1.2 core
+        /// schema, as the JSON reader keeps a JSON number or bool: a whole number such as 7, -7, 007 or 0x1F is a long (a
+        /// BigInteger past a long), -0 is a negative zero, a number that keeps its digits as a decimal, such as 1.50, is a
+        /// decimal, a number such as 1e5, .inf or .nan is a double, and true, True, TRUE, false, False
+        /// or FALSE is a bool. YamlDotNet reads ~, null and an empty value as null and a quoted or tagged scalar as text or
+        /// as its tag, so "007" and '1' stay text. Anything else is left to YamlDotNet, which reads it as text.
+        /// </summary>
+        internal class YamlPlainScalarDeserializer : INodeDeserializer
+        {
+            private readonly bool intWhenItFits;
+
+            /// <param name="intWhenItFits">true reads a whole number that fits an int as an int, as the class reader reads an
+            /// int written into an object member back</param>
+            internal YamlPlainScalarDeserializer(bool intWhenItFits)
+            {
+                this.intWhenItFits = intWhenItFits;
+            }
+
+            public bool Deserialize(IParser parser, Type expectedType, Func<IParser, Type, object> nestedObjectDeserializer, out object value, ObjectDeserializer rootDeserializer)
+            {
+                value = null;
+
+                if (typeof(object) == expectedType && true == parser.Accept(out YamlDotNet.Core.Events.Scalar scalar)
+                    && ScalarStyle.Plain == scalar.Style && true == scalar.Tag.IsEmpty)
+                {
+                    string text = scalar.Value;
+                    System.Numerics.BigInteger wholeNumber = System.Numerics.BigInteger.Zero;
+                    bool isWholeNumber = true;
+
+                    if (true == Regex.IsMatch(text, "^[-+]?[0-9]+$"))
+                        wholeNumber = System.Numerics.BigInteger.Parse(text, System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture);
+                    else if (true == Regex.IsMatch(text, "^0x[0-9a-fA-F]+$"))
+                        wholeNumber = System.Numerics.BigInteger.Parse("0" + text.Substring(2), System.Globalization.NumberStyles.AllowHexSpecifier, System.Globalization.CultureInfo.InvariantCulture);
+                    else if (true == Regex.IsMatch(text, "^0o[0-7]+$"))
+                        wholeNumber = text.Substring(2).Aggregate(System.Numerics.BigInteger.Zero, (number, digit) => number * 8 + (digit - '0'));
+                    else
+                        isWholeNumber = false;
+
+                    // a number that keeps its digits as a decimal, such as 1.50 or 52000.00, is a decimal, as the json and xml
+                    // readers read it, where a double would make it 1.5; read straight into an object member of a class, as
+                    // the class reader reads it, it is the double it was read as before
+                    decimal asWritten = 0;
+                    bool keepsDigits = false == intWhenItFits && false == isWholeNumber && true == decimal.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out asWritten)
+                        && asWritten.ToString(System.Globalization.CultureInfo.InvariantCulture) == text;
+
+                    // -0 is a negative zero, a double, which a whole number cannot hold
+                    if (true == isWholeNumber && true == text.StartsWith("-", StringComparison.Ordinal) && 0 == wholeNumber)
+                        value = -0.0;
+                    else if (true == keepsDigits)
+                        value = asWritten;
+                    else if (true == isWholeNumber && true == intWhenItFits && int.MinValue <= wholeNumber && int.MaxValue >= wholeNumber)
+                        value = (int)wholeNumber;
+                    else if (true == isWholeNumber && long.MinValue <= wholeNumber && long.MaxValue >= wholeNumber)
+                        value = (long)wholeNumber;
+                    else if (true == isWholeNumber)
+                        value = wholeNumber;
+                    // a number past a double, such as 1e400, is Infinity on .NET and stays text on .NET Framework, which cannot parse it
+                    else if (true == Regex.IsMatch(text, @"^[-+]?(\.[0-9]+|[0-9]+(\.[0-9]*)?)([eE][-+]?[0-9]+)?$")
+                        && true == double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double floating))
+                        // a zero written with a minus, such as -0.0, is a negative zero, which .NET Framework reads as 0
+                        value = 0 == floating && true == text.StartsWith("-", StringComparison.Ordinal) ? -0.0 : floating;
+                    else if (true == Regex.IsMatch(text, @"^[-+]?\.(inf|Inf|INF)$"))
+                        value = text.StartsWith("-", StringComparison.Ordinal) ? double.NegativeInfinity : double.PositiveInfinity;
+                    else if (true == Regex.IsMatch(text, @"^\.(nan|NaN|NAN)$"))
+                        value = double.NaN;
+                    else if (true == Regex.IsMatch(text, "^(true|True|TRUE|false|False|FALSE)$"))
+                        value = "true" == text.ToLowerInvariant();
+
+                    // the scalar is read only when it was typed above
+                    if (null != value)
+                        parser.MoveNext();
+                }
+
+                return null != value;
+            }
+        }
+
+        /// <summary>
+        /// Reads a YAML mapping going into an object as the Dictionary&lt;object, object&gt; YamlDotNet makes, with each key
+        /// that is a scalar read as its text, as a JSON key is, so a key such as 1.50, 007 or True keeps its spelling. A key
+        /// that is a list or a mapping, as ? [k] writes, and every value are read as YamlDotNet reads them.
+        /// </summary>
+        internal class YamlTextKeyMappingDeserializer : INodeDeserializer
+        {
+            public bool Deserialize(IParser parser, Type expectedType, Func<IParser, Type, object> nestedObjectDeserializer, out object value, ObjectDeserializer rootDeserializer)
+            {
+                bool read = false;
+                value = null;
+
+                if (typeof(Dictionary<object, object>) == expectedType && true == parser.TryConsume(out YamlDotNet.Core.Events.MappingStart _))
+                {
+                    var mapping = new Dictionary<object, object>();
+
+                    while (false == parser.TryConsume(out YamlDotNet.Core.Events.MappingEnd _))
+                    {
+                        object key = nestedObjectDeserializer(parser, true == parser.Accept(out YamlDotNet.Core.Events.Scalar _) ? typeof(string) : typeof(object));
+                        object item = nestedObjectDeserializer(parser, typeof(object));
+
+                        // an alias to a node still being read, as Left: *T inside the mapping T is, is set once T is read
+                        if (item is IValuePromise promise)
+                            promise.ValueAvailable += resolved => mapping[key] = resolved;
+                        else
+                            mapping[key] = item;
+                    }
+
+                    value = mapping;
+                    read = true;
+                }
+
+                return read;
+            }
         }
 
         internal static object ProcessDictionaryValue(object value, List<List<string>> gridRows = null, HashSet<string> gridColumns = null, string parentKey = null, HashSet<object> visited = null)
@@ -1298,6 +1499,7 @@ namespace GenerallyPositive
                         return stringValue;
                     }
                 }
+                // a whole number past a long stays a number, as the JSON reader keeps it
                 if (valueType == typeof(System.Numerics.BigInteger))
                 {
                     stringValue = value.ToString();
@@ -1305,7 +1507,7 @@ namespace GenerallyPositive
                     {
                         gridRows.Add(new List<string> { stringValue });
                     }
-                    return stringValue;
+                    return value;
                 }
                 if (valueType == typeof(System.Version))
                 {
@@ -1390,20 +1592,20 @@ namespace GenerallyPositive
         private static IGPALGrid<string> ColumnNamesForFile(GPALFile inputFile, int fileIdx)
         {
             IGPALGrid<string> columnList = ((IGPALFileInternal)inputFile).FileSettings.ColumnList;
-            IGPALGrid<string> retVal = columnList;
+            IGPALGrid<string> retVal = GPAL.GridForType<string>();
 
-            if (false == ((IGPALFileInternal)inputFile).FileSettings.UseOneHeaderForAllFiles
-                && 0 < fileIdx
-                && fileIdx < columnList.Count())
-            {
-                retVal = GPAL.GridForType<string>();
-                retVal.AddRow(new List<string>(columnList[fileIdx]));
-            }
+            // the file's own column names, or the first list given when one is used for all files
+            List<string> columns = true == ((IGPALFileInternal)inputFile).FileSettings.UseOneHeaderForAllFiles
+                ? ((IEnumerable<List<string>>)columnList).FirstOrDefault(row => 0 < row.Count)
+                : fileIdx < columnList.Count() ? columnList[fileIdx] : null;
+
+            if (null != columns && 0 < columns.Count)
+                retVal.AddRow(new List<string>(columns));
 
             return retVal;
         }
 
-        internal static bool TokenizeFile(GPALFile inputFile, ConverterSettings myConverterSettings = null)
+        internal static bool TokenizeFile(GPALFile inputFile, ConverterSettings myConverterSettings = null, int onlyFileIdx = -1)
         {
             var xmlDoc = new XmlDocument();
             int fileIdx = 0;
@@ -1417,24 +1619,32 @@ namespace GenerallyPositive
             //    return true;
             //}
 
+            // No converter settings: a workflow is reading the file (FillInFrom, InputFrom, a form, GPALAI). It uses the
+            // grid alone, so delimited and text files are read a line at a time and the text and dictionaries are not kept.
+            bool forWorkflow = null == myConverterSettings;
+
             // Preserve a caller-supplied FirstLineIsColumnHeaders (e.g. via the converter-level
             // WithFirstLineHasColumnNames) as a fallback when the GPALFile itself doesn't specify
             // FirstLineIsColumnNames for this file index.
             bool callerFirstLineIsColumnHeaders = myConverterSettings?.InputFirstLineIsColumnHeaders ?? false;
 
-            // The output format is already known by the time TokenizeFile runs, so for delimited
-            // input we can avoid holding a fully-populated dictionary AND a re-derived delimited
-            // string AND a grid all in memory at once - only one of those representations is
-            // actually consumed downstream depending on the output format.
+            // The output format is known when TokenizeFile runs. For delimited input, only the representation the
+            // output format uses is kept, so the dictionary, the delimited string and the grid are not all held in
+            // memory at once.
+            // A database is written from the grid, one row of parameters per row, so it keeps the grid.
             DataFormat outDataFormat = myConverterSettings?.OutDataFormat ?? DataFormat.NOTSET;
             bool outputNeedsDictionary = outDataFormat == DataFormat.JSON
                 || outDataFormat == DataFormat.XML
                 || outDataFormat == DataFormat.YAML
                 || outDataFormat == DataFormat.CLASS
-                || outDataFormat == DataFormat.DICTIONARY
-                || outDataFormat == DataFormat.DATABASE;
+                || outDataFormat == DataFormat.DICTIONARY;
 
+            // each read starts over, so reading a file again does not add its rows a second time
             ((IGPALFileInternal)inputFile).FileDictionary.Clear();
+            ((IGPALFileInternal)inputFile).FileData.Clear();
+            ((IGPALFileInternal)inputFile).FileGrid.Clear();
+            ((IGPALFileInternal)inputFile).FileSettings.ExcelRowsPerSheet.Clear();
+            ((IGPALFileInternal)inputFile).FileSettings.ExcelSheetNames.Clear();
             foreach (string filename in inputFile.Filenames)
             {
                 DataFormat inDataFormat = ConverterHelper.GetDataFormatFromExtension(filename);
@@ -1445,27 +1655,22 @@ namespace GenerallyPositive
                     InDelimiter = ((IGPALFileInternal)inputFile).Delimiter.Count() > fileIdx && ((IGPALFileInternal)inputFile).Delimiter[fileIdx].HasValue
                         ? ((IGPALFileInternal)inputFile).Delimiter[fileIdx].Value
                         : (char?)null,
-                    FieldsEnclosedInQuotes = ((IGPALFileInternal)inputFile).FieldsEnclosedInQuotes.Count() > fileIdx
-                        ? ((IGPALFileInternal)inputFile).FieldsEnclosedInQuotes[fileIdx]
-                        : false,
-                    FirstLineIsColumnHeaders = ((IGPALFileInternal)inputFile).FirstLineIsColumnNames.Count() > fileIdx
-                        ? ((IGPALFileInternal)inputFile).FirstLineIsColumnNames[fileIdx]
+                    FieldsEnclosedInQuotes = SettingForFile(((IGPALFileInternal)inputFile).FileSettings.FieldsEnclosedInQuotes, fileIdx, false),
+                    FirstLineIsColumnHeaders = fileIdx < ((IGPALFileInternal)inputFile).FileSettings.FirstLineGiven.Count && true == ((IGPALFileInternal)inputFile).FileSettings.FirstLineGiven[fileIdx]
+                        ? ((IGPALFileInternal)inputFile).FileSettings.FirstLineIsColumnNames[fileIdx]
                         : callerFirstLineIsColumnHeaders,
-                    IgnoreFirstLineColumnHeaders = ((IGPALFileInternal)inputFile).IgnoreFirstLineColumnNames.Count() > fileIdx
-                        ? ((IGPALFileInternal)inputFile).IgnoreFirstLineColumnNames[fileIdx]
-                        : false,
+                    IgnoreFirstLineColumnHeaders = SettingForFile(((IGPALFileInternal)inputFile).FileSettings.IgnoreFirstLineColumnNames, fileIdx, false),
                     ColumnNames = inputIsDelimited ? ColumnNamesForFile(inputFile, fileIdx) : new GPALGrid<string>(),
                     ExcelSheetNames = ((IGPALFileInternal)inputFile).FileSettings.ExcelSheetNames,
                     ExcelRowsPerSheet = ((IGPALFileInternal)inputFile).FileSettings.ExcelRowsPerSheet,
                     InputFile = inputFile,
                 };
-                if (fileIdx < ((IGPALFileInternal)inputFile).FileSettings.Delimiter.Count())
+
+                // reading one file of the GPALFile passes over the others
+                if (0 <= onlyFileIdx && fileIdx != onlyFileIdx)
                 {
-                    ((IGPALFileInternal)inputFile).FileSettings.Delimiter[fileIdx] = ConverterHelper.GetDelimiterFromFormat(inDataFormat);
-                }
-                else
-                {
-                    ((IGPALFileInternal)inputFile).FileSettings.Delimiter.Add(ConverterHelper.GetDelimiterFromFormat(inDataFormat));
+                    fileIdx++;
+                    continue;
                 }
 
                 try
@@ -1481,7 +1686,20 @@ namespace GenerallyPositive
                             // False for a format with no case below, so an unread file is not marked as tokenized.
                             bool formatHandled = true;
 
-                            switch (inDataFormat)
+                            // A workflow reads a delimited, text or unknown file a line at a time, with this file's
+                            // delimiter and first line setting.
+                            bool readByLine = true == forWorkflow
+                                && (true == inputIsDelimited || DataFormat.LOG == inDataFormat || DataFormat.NOTSET == inDataFormat);
+
+                            if (true == readByLine)
+                                ((IGPALFileInternal)inputFile).FileGrid.Add(ReadLineGrid(input,
+                                    DelimiterForFile(((IGPALFileInternal)inputFile).FileSettings, fileIdx, inDataFormat)
+                                        ?? ConverterHelper.GetDelimiterFromFormat(inDataFormat) ?? ',',
+                                    SettingForFile(((IGPALFileInternal)inputFile).FileSettings.IgnoreFirstLineColumnNames, fileIdx, false)));
+                            else
+                            // a .txt or .log file given a delimiter is delimited text and is read as a csv file is, with its
+                            // delimiter and first line setting
+                            switch (DataFormat.LOG == inDataFormat && true == myConverterSettings.InDelimiter.HasValue ? DataFormat.CSV : inDataFormat)
                             {
                                 case DataFormat.CARET:
                                 case DataFormat.CSV:
@@ -1505,6 +1723,26 @@ namespace GenerallyPositive
                                     else
                                     {
                                         dynamic delimitedData = ConverterHelper.ConvertInputDictionaryToDelimitedAndGrid(myConverterSettings, out outGrid);
+
+                                        // A file with a header line and no rows has no row to carry its names, so its grid
+                                        // starts with its header line, as the grid of a file with rows does
+                                        if (true == myConverterSettings.FirstLineIsColumnHeaders && 0 == dictionary.Count)
+                                        {
+                                            input.BaseStream.Position = 0;
+                                            input.DiscardBufferedData();
+
+                                            string headerLine = null;
+                                            string fileLine;
+                                            while (null == headerLine && null != (fileLine = input.ReadLine()))
+                                                if (false == string.IsNullOrWhiteSpace(fileLine))
+                                                    headerLine = fileLine;
+
+                                            // reading again from the start reads a file's byte order mark as a character
+                                            if (null != headerLine)
+                                                outGrid.AddRow(ConverterHelper.SplitRespectingQuotes(headerLine.TrimStart('\uFEFF'),
+                                                    myConverterSettings.InDelimiter ?? ConverterHelper.GetDelimiterFromFormat(inDataFormat) ?? ','));
+                                        }
+
                                         ((IGPALFileInternal)inputFile).FileData.Add(delimitedData);
                                         ((IGPALFileInternal)inputFile).FileGrid.Add(outGrid);
 
@@ -1515,13 +1753,15 @@ namespace GenerallyPositive
                                     break;
 
                                 case DataFormat.LOG:
-                                    // Plain text: one column, one row per line, no splitting.
+                                    // Plain text given no delimiter: each line is one value, kept as written, quotes and
+                                    // all. A first line declared as column names is the name of that one column.
                                     string logText = input.ReadToEnd();
                                     input.BaseStream.Position = 0;
 
                                     IGPALGrid<string> logGrid = GPAL.GridForType<string>();
                                     var logRecords = new Dictionary<object, dynamic>();
                                     int logLineIdx = 0;
+                                    string logColumnName = null;
 
                                     // Drop the trailing newline; it is not an empty line. Inner blank lines are kept.
                                     string logLines = logText.TrimEnd(Environment.NewLine.ToCharArray());
@@ -1530,7 +1770,11 @@ namespace GenerallyPositive
                                         foreach (string logLine in logLines.Split(new[] { Environment.NewLine, "\n" }, StringSplitOptions.None))
                                         {
                                             logGrid.AddRow(new List<string> { logLine });
-                                            logRecords[$"GPALKEY{logLineIdx++:D4}"] = logLine;
+
+                                            if (true == myConverterSettings.FirstLineIsColumnHeaders && null == logColumnName)
+                                                logColumnName = logLine;
+                                            else
+                                                logRecords[$"GPALKEY{logLineIdx++:D4}"] = null != logColumnName ? (dynamic)new Dictionary<string, string> { { logColumnName, logLine } } : logLine;
                                         }
 
                                     ((IGPALFileInternal)inputFile).FileData.Add(logText);
@@ -1543,12 +1787,17 @@ namespace GenerallyPositive
                                     string fileString = input.ReadToEnd();
                                     input.BaseStream.Position = 0;
 
-                                    dynamic jsonObject = JsonConvert.DeserializeObject<dynamic>(fileString, new JsonConverter[] { new CustomJsonConverter() });
+                                    // DateParseHandling.None keeps a date string as the text written, where the default makes it a DateTime
+                                    // MaxDepth = null reads json nested past the reader's 64 levels, as html read into json is, to the
+                                    // converter's limit, past which the file is not read
+                                    CustomJsonConverter fileConverter = new CustomJsonConverter(fileString);
+                                    dynamic jsonObject = JsonConvert.DeserializeObject<dynamic>(fileString, new JsonSerializerSettings { DateParseHandling = DateParseHandling.None, MaxDepth = null, Converters = { fileConverter } });
+                                    if (true == fileConverter.TooDeep)
+                                        throw new JsonReaderException($"[{filename}] is nested deeper than [{ConverterHelper.NestingLimit}] levels");
 
                                     ((IGPALFileInternal)inputFile).FileData.Add(fileString);
 
                                     var records = new Dictionary<object, dynamic>();
-                                    var gridRows = new List<List<string>>();
 
                                     // Helper to recursively convert any array (IEnumerable<dynamic>) to surrogate-keyed dict
                                     dynamic ConvertArrayToSurrogateDict(IEnumerable<dynamic> array, int startIndex = 0)
@@ -1570,27 +1819,9 @@ namespace GenerallyPositive
                                         {
                                             var items = Enumerable.ToList<dynamic>(enumerable);
 
-                                            // A complex-key dictionary is written as an array of {"Key": ..., "Value":
-                                            // ...} objects (see NormalizeForCleanJson), the KeyValuePair<K,V>
-                                            // convention. Rebuild a real dictionary here; CreateObjectFromDictionary
-                                            // handles a nested-dict key. A real object with exactly Key and Value
-                                            // properties also matches; accepted.
-                                            bool looksLikePairsArray = items.Count > 0 && items.All(it =>
-                                                it is IDictionary d && d.Count == 2
-                                                && d.Contains("Key") && d.Contains("Value"));
-                                            if (looksLikePairsArray)
-                                            {
-                                                var pairsDict = new Dictionary<object, dynamic>();
-                                                foreach (IDictionary pairObj in items)
-                                                {
-                                                    dynamic pairKey = ReplaceArrays(pairObj["Key"]);
-                                                    dynamic pairValue = ReplaceArrays(pairObj["Value"]);
-                                                    pairsDict[pairKey] = pairValue;
-                                                }
-                                                return pairsDict;
-                                            }
-
-                                            // It's an array/list
+                                            // It's an array/list. An array of {"Key": ..., "Value": ...} objects, as a
+                                            // complex-key dictionary is written, stays an array; a dictionary target
+                                            // keys its records by Key
                                             return ConvertArrayToSurrogateDict(items);
                                         }
                                         else if (value is IDictionary<string, dynamic> dict)
@@ -1612,8 +1843,10 @@ namespace GenerallyPositive
 
                                     dynamic processedRoot = ReplaceArrays(jsonObject);
 
-                                    // If top-level is array, wrap as surrogate dict for FileDictionary
-                                    if (processedRoot is IDictionary && ConverterHelper.IsArrayLike((IDictionary)processedRoot))
+                                    // If top-level is array, wrap as surrogate dict for FileDictionary. An empty array is
+                                    // an empty dictionary, with no root, where an empty object is under root
+                                    if (processedRoot is IDictionary && (ConverterHelper.IsArrayLike((IDictionary)processedRoot)
+                                        || (0 == ((IDictionary)processedRoot).Count && jsonObject is IEnumerable<dynamic> && false == jsonObject is string)))
                                     {
                                         records = (Dictionary<object, dynamic>)processedRoot;
                                     }
@@ -1623,66 +1856,39 @@ namespace GenerallyPositive
                                         records["root"] = processedRoot;
                                     }
 
-                                    // Grid building remains the same: iterate top-level records (now surrogate-keyed)
-                                    foreach (KeyValuePair<object, dynamic> pair in records.OrderBy(p => p.Key.ToString()))
-                                    {
-                                        if (pair.Value is IDictionary rowDict)
-                                        {
-                                            var row = new List<string>();
-                                            foreach (dynamic kvp in rowDict)
-                                            {
-                                                if (kvp.Key != null)
-                                                {
-                                                    string key = kvp.Key.ToString();
-                                                    if (key.StartsWith("GPALKEY")) continue; // skip surrogates in grid
-                                                    var processedValue = ProcessDictionaryValue(kvp.Value, null, null, key);
-                                                    if (!(kvp.Value is IDictionary) && !(kvp.Value is IList<object>))
-                                                    {
-                                                        row.Add(FlattenValueForGrid(processedValue));
-                                                    }
-                                                }
-                                            }
-                                            if (row.Count > 0)
-                                            {
-                                                gridRows.Add(row);
-                                            }
-                                        }
-                                    }
-
                                     ((IGPALFileInternal)inputFile).FileDictionary.Add(records);
 
                                     GPAL.PublishSimpleEvent(GPALEventType.DEBUG, $"JSON FileDictionary count: [{records.Count}]", null, GPALObjectType.Other);
 
-                                    var gridRow = GPAL.Grid.ToGPALObject();
-                                    foreach (var row in gridRows)
-                                    {
-                                        gridRow.AddRow(row);
-                                    }
-
-                                    myConverterSettings.InputDictionary = ((IGPALFileInternal)inputFile).FileDictionary;
-                                    ((IGPALFileInternal)inputFile).FileGrid.Add(gridRow);
+                                    // the grid holds the rows the file writes to csv, as for an XML file. A JSON file names
+                                    // its columns in its keys, so the grid has no header row
+                                    myConverterSettings.InputDictionary = new List<Dictionary<object, dynamic>> { records };
+                                    myConverterSettings.FirstLineIsColumnHeaders = false;
+                                    ConverterHelper.ConvertInputDictionaryToDelimitedAndGrid(myConverterSettings, out outGrid, DataFormat.JSON);
+                                    ((IGPALFileInternal)inputFile).FileGrid.Add(outGrid);
                                     break;
 
                                 case DataFormat.XLSX:
                                     IGPALGrid<string> grid = ExcelHelper.TokenizeExcelFile(filename2);
                                     List<string> colNames = new List<string>();
-                                    List<Dictionary<object, dynamic>> returnList = new List<Dictionary<object, dynamic>>();
+                                    // one entry for the file holding its rows, every sheet's, by GPALKEY row number, as a
+                                    // delimited file has
+                                    Dictionary<object, dynamic> xlsxRecords = new Dictionary<object, dynamic>();
+                                    int xlsxRecordIdx = 0;
 
                                     ((IGPALFileInternal)inputFile).FileGrid.Add((IGPALGrid<string>)grid.Clone());
 
                                     // find out how many worksheets we have and find out the number of rows to ascertain when the grid data is another sheet with different column names
-                                    using (var workbook = new XLWorkbook(filename))
+                                    using (var workbook = new XLWorkbook(filename2))
                                     {
                                         List<int> rowsPerSheet = new List<int>();
                                         List<string> sheetName = new List<string>();
 
                                         foreach (IXLWorksheet worksheet in workbook.Worksheets)
                                         {
-                                            int lastRowNumber = worksheet.LastRowUsed()?.RowNumber() ?? 0;
-                                            // If there are blank rows after the last used row, use the sheet's defined range
-                                            int totalRows = Math.Max(lastRowNumber, worksheet.RangeUsed()?.LastRow().RowNumber() ?? 0);
-                                            // Or even simpler – just take the maximum row index that exists:
-                                            totalRows = worksheet.Rows().LastOrDefault()?.RowNumber() ?? 0;
+                                            // the rows ExcelHelper.TokenizeExcelFile put in the grid for this sheet: up to its
+                                            // last row with a value, so formatted blank rows below it are not counted
+                                            int totalRows = worksheet.LastRowUsed()?.RowNumber() ?? 0;
 
                                             rowsPerSheet.Add(totalRows);
                                             sheetName.Add(worksheet.Name);
@@ -1691,55 +1897,101 @@ namespace GenerallyPositive
                                         ((IGPALFileInternal)inputFile).FileSettings.ExcelRowsPerSheet.AddRow(rowsPerSheet);
                                         ((IGPALFileInternal)inputFile).FileSettings.ExcelSheetNames.AddRow(sheetName);
 
+                                        // a cell that holds a number keeps it as a number, as a JSON number is: its value in
+                                        // the invariant culture's round-trip form, 1.5, 0.30000000000000004 or 1E+15, whatever
+                                        // the computer's culture, is read as a decimal, and a whole number as a long. Other
+                                        // cells, such as text 007, give null and stay text
+                                        object CellNumber(IXLWorksheet cellSheet, int sheetRow, int sheetColumn)
+                                        {
+                                            object cellNumber = null;
+                                            if (XLDataType.Number == cellSheet.Cell(sheetRow, sheetColumn).DataType)
+                                            {
+                                                string numberText = cellSheet.Cell(sheetRow, sheetColumn).GetDouble().ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+                                                cellNumber = numberText;
+                                                if (true == decimal.TryParse(numberText, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out decimal cellDecimal))
+                                                    cellNumber = decimal.Truncate(cellDecimal) == cellDecimal && long.MinValue <= cellDecimal && long.MaxValue >= cellDecimal ? (object)(long)cellDecimal : cellDecimal;
+                                            }
+                                            return cellNumber;
+                                        }
+
                                         int columnHeaders = 0;
+                                        int sheetNumber = 0;
                                         foreach (int rowCnt in rowsPerSheet)
                                         {
+                                            sheetNumber++;
                                             if (myConverterSettings.FirstLineIsColumnHeaders)
                                             {
-                                                colNames = grid[columnHeaders];
+                                                // a name the sheet's header line repeats is made its own, as a csv file's is
+                                                colNames = ConverterHelper.UniqueNames(grid[columnHeaders], $"{filename2}] sheet [{sheetName[sheetNumber - 1]}");
+
+                                                myConverterSettings.ColumnNames.AddRow(colNames);
+
+                                                // the file's first sheet names its columns at the file's own place in the list,
+                                                // unless names were given for it
+                                                while (((IGPALFileInternal)inputFile).FileSettings.ColumnList.Count() <= fileIdx)
+                                                    ((IGPALFileInternal)inputFile).FileSettings.ColumnList.AddRow(new List<string>());
+
+                                                if (0 == ((IGPALFileInternal)inputFile).FileSettings.ColumnList[fileIdx].Count)
+                                                    ((IGPALFileInternal)inputFile).FileSettings.ColumnList[fileIdx].AddRange(colNames);
+
+                                                int rowIdx = 0;
+
+                                                foreach (Dictionary<object, dynamic> row in ConverterHelper.ConvertGridToDictionary(colNames, grid, columnHeaders, rowCnt))
+                                                {
+                                                    if (0 == rowIdx++)
+                                                        continue;
+
+                                                    // a cell that holds a number keeps it as a number
+                                                    IXLWorksheet rowSheet = workbook.Worksheet(sheetNumber);
+                                                    for (int colIdx = 0; colIdx < colNames.Count; colIdx++)
+                                                    {
+                                                        object cellNumber = CellNumber(rowSheet, rowIdx, colIdx + 1);
+                                                        if (null != cellNumber)
+                                                            row[colNames[colIdx]] = cellNumber;
+                                                    }
+
+                                                    xlsxRecords[$"GPALKEY{xlsxRecordIdx++:D4}"] = row;
+                                                }
                                             }
                                             else
                                             {
-                                                int colIdx = 0;
-                                                foreach (string columnName in grid[columnHeaders].Select(v => (string)v))
+                                                // a sheet with no header line names nothing, so each row is its list of values, as
+                                                // a csv file's is; given column names for the file name its values, as they do a
+                                                // csv file's, and a value past the last name goes under a name made from its
+                                                // column number
+                                                // a name given more than once is made its own, as a csv file's given names are
+                                                List<string> givenNames = ((IEnumerable<List<string>>)ColumnNamesForFile(inputFile, fileIdx)).FirstOrDefault();
+                                                if (null != givenNames)
+                                                    givenNames = ConverterHelper.UniqueNames(givenNames, $"{filename2}] sheet [{sheetName[sheetNumber - 1]}");
+
+                                                for (int rowIdx = columnHeaders; rowIdx < columnHeaders + rowCnt; rowIdx++)
                                                 {
-                                                    colNames.Add($"Column{colIdx++}");
+                                                    if (null == givenNames)
+                                                        xlsxRecords[$"GPALKEY{xlsxRecordIdx++:D4}"] = new List<string>(grid[rowIdx]);
+                                                    else
+                                                    {
+                                                        // a cell that holds a number keeps it as a number, as it does under a header line
+                                                        List<string> rowNames = ConverterHelper.NamesForWidth(givenNames, grid[rowIdx].Count);
+                                                        Dictionary<object, dynamic> namedRow = new Dictionary<object, dynamic>();
+                                                        IXLWorksheet rowSheet = workbook.Worksheet(sheetNumber);
+
+                                                        for (int colIdx = 0; colIdx < rowNames.Count; colIdx++)
+                                                            namedRow[rowNames[colIdx]] = colIdx < grid[rowIdx].Count
+                                                                ? CellNumber(rowSheet, rowIdx - columnHeaders + 1, colIdx + 1) ?? grid[rowIdx][colIdx]
+                                                                : string.Empty;
+
+                                                        xlsxRecords[$"GPALKEY{xlsxRecordIdx++:D4}"] = namedRow;
+                                                    }
                                                 }
-                                            }
-
-                                            myConverterSettings.ColumnNames.AddRow(colNames);
-
-                                            if (0 == ((IGPALFileInternal)inputFile).FileSettings.ColumnList.Count())
-                                                ((IGPALFileInternal)inputFile).FileSettings.ColumnList.AddRow(colNames);
-
-                                            int rowIdx = 0;
-
-                                            foreach (Dictionary<object, dynamic> row in ConverterHelper.ConvertGridToDictionary(colNames, grid, columnHeaders, rowCnt))
-                                            {
-                                                if (true == myConverterSettings.FirstLineIsColumnHeaders && 0 == rowIdx++)
-                                                    continue;
-
-                                                returnList.Add(row);
                                             }
 
                                             columnHeaders += rowCnt;
                                         }
-
-                                        // now delete the column headers if denoted in settings
-                                        columnHeaders = 0;
-                                        int iteration = 0;
-                                        foreach (int rowCnt in rowsPerSheet)
-                                        {
-                                            if (myConverterSettings.FirstLineIsColumnHeaders)
-                                            {
-                                                grid.DeleteRow(0);
-                                            }
-                                            columnHeaders = rowCnt - iteration++;   // we have one less row than we counted in the grid for each iteration
-                                        }
                                     }
 
-                                    ((IGPALFileInternal)inputFile).FileDictionary = returnList;
-                                    myConverterSettings.InputDictionary = ((IGPALFileInternal)inputFile).FileDictionary;
+                                    // added to the files read before it
+                                    ((IGPALFileInternal)inputFile).FileDictionary.Add(xlsxRecords);
+                                    myConverterSettings.InputDictionary = new List<Dictionary<object, dynamic>> { xlsxRecords };
                                     break;
 
                                 case DataFormat.XML:
@@ -1749,13 +2001,16 @@ namespace GenerallyPositive
                                     var xmlDictionary = ConverterHelper.ConvertXMLToDictionary(xmlDoc);
                                     ((IGPALFileInternal)inputFile).FileDictionary.Add(xmlDictionary);
                                     myConverterSettings.InputDictionary = new List<Dictionary<object, dynamic>> { xmlDictionary };
-                                    ((IGPALFileInternal)inputFile).FileData.Add(ConverterHelper.ConvertInputDictionaryToDelimitedAndGrid(myConverterSettings, out outGrid));
+                                    ((IGPALFileInternal)inputFile).FileData.Add(ConverterHelper.ConvertInputDictionaryToDelimitedAndGrid(myConverterSettings, out outGrid, DataFormat.XML));
                                     ((IGPALFileInternal)inputFile).FileGrid.Add(outGrid);
                                     break;
 
                                 case DataFormat.YAML:
+                                    // a plain number, true, false or null keeps its type, as a JSON file's does; keys are text
                                     var deserializer = new DeserializerBuilder()
-                                        .WithNamingConvention(CamelCaseNamingConvention.Instance)
+                                        .WithMaximumRecursion(ConverterHelper.NestingLimit)
+                                        .WithNodeDeserializer(new YamlPlainScalarDeserializer(false))
+                                        .WithNodeDeserializer(new YamlTextKeyMappingDeserializer())
                                         .Build();
 
                                     string yamlText = input.ReadToEnd();
@@ -1763,20 +2018,14 @@ namespace GenerallyPositive
                                     dynamic yamlObject = deserializer.Deserialize<object>(yamlText);
                                     ((IGPALFileInternal)inputFile).FileData.Add(yamlText);
 
-                                    ((IGPALFileInternal)inputFile).FileDictionary.Clear();
-                                    ((IGPALFileInternal)inputFile).FileGrid.Clear();
-
-                                    var yamlGridRows = new List<List<string>>();
                                     var processedYamlDict = new Dictionary<dynamic, dynamic>();
 
                                     if (yamlObject is IDictionary yamlMapping)
                                     {
                                         foreach (var key in yamlMapping.Keys)
                                         {
-                                            dynamic processedKey = (key is IDictionary || key is IList)
-                                                ? ProcessDictionaryValue(key, yamlGridRows)
-                                                : (key?.ToString() ?? "null_key");
-                                            processedYamlDict[processedKey] = ProcessDictionaryValue(yamlMapping[key], yamlGridRows);
+                                            string processedKey = null == key ? "null_key" : YamlKeyText(key);
+                                            processedYamlDict[processedKey] = ProcessDictionaryValue(yamlMapping[key]);
                                         }
                                     }
                                     else if (yamlObject is IList yamlSequence)
@@ -1786,30 +2035,37 @@ namespace GenerallyPositive
                                         int rootIdx = 0;
                                         foreach (var item in yamlSequence)
                                         {
-                                            processedYamlDict[$"GPALKEY{rootIdx++:D4}"] = ProcessDictionaryValue(item, yamlGridRows);
+                                            processedYamlDict[$"GPALKEY{rootIdx++:D4}"] = ProcessDictionaryValue(item);
                                         }
+                                    }
+                                    else if (null != yamlObject)
+                                    {
+                                        // Root is a bare YAML scalar.
+                                        processedYamlDict["GPALKEY0000"] = ProcessDictionaryValue(yamlObject);
                                     }
                                     else
                                     {
-                                        // Root is a bare YAML scalar.
-                                        processedYamlDict["GPALKEY0000"] = ProcessDictionaryValue(yamlObject, yamlGridRows);
-                                    }
-
-                                    var yamlGridRow = GPAL.Grid.ToGPALObject();
-                                    foreach (var row in yamlGridRows)
-                                    {
-                                        yamlGridRow.AddRow(row);
+                                        // an empty document, or one holding only ~ or a comment, is held as an empty JSON file
+                                        // is, a null under the reader's root
+                                        processedYamlDict["root"] = null;
                                     }
 
                                     ((IGPALFileInternal)inputFile).FileDictionary.Add(processedYamlDict);
-                                    myConverterSettings.InputDictionary = ((IGPALFileInternal)inputFile).FileDictionary;
-                                    ((IGPALFileInternal)inputFile).FileGrid.Add(yamlGridRow);
+
+                                    // the grid holds the rows the file writes to csv, as for an XML file. A YAML file names
+                                    // its columns in its keys, so the grid has no header row
+                                    myConverterSettings.InputDictionary = new List<Dictionary<object, dynamic>> { processedYamlDict };
+                                    myConverterSettings.FirstLineIsColumnHeaders = false;
+                                    ConverterHelper.ConvertInputDictionaryToDelimitedAndGrid(myConverterSettings, out outGrid, DataFormat.YAML);
+                                    ((IGPALFileInternal)inputFile).FileGrid.Add(outGrid);
                                     break;
 
                                 case DataFormat.HTML:
-                                    ((IGPALFileInternal)inputFile).FileDictionary = ConverterHelper.ConvertHtmlToDictionary(filename2);
-                                    myConverterSettings.InputDictionary = ((IGPALFileInternal)inputFile).FileDictionary;
-                                    dynamic inData = ConverterHelper.ConvertInputDictionaryToDelimitedAndGrid(myConverterSettings, out outGrid);
+                                    // added to the files read before it; this file's entries alone go on to its grid
+                                    List<Dictionary<object, dynamic>> htmlDictionaries = ConverterHelper.ConvertHtmlToDictionary(filename2);
+                                    ((IGPALFileInternal)inputFile).FileDictionary.AddRange(htmlDictionaries);
+                                    myConverterSettings.InputDictionary = htmlDictionaries;
+                                    dynamic inData = ConverterHelper.ConvertInputDictionaryToDelimitedAndGrid(myConverterSettings, out outGrid, DataFormat.HTML);
                                     ((IGPALFileInternal)inputFile).FileData.Add(inData);
                                     ((IGPALFileInternal)inputFile).FileGrid.Add(outGrid);
                                     break;
@@ -1833,10 +2089,22 @@ namespace GenerallyPositive
                 fileIdx++;
             }
 
-            if (0 == ((IGPALFileInternal)inputFile).FileSettings.FileGrid.Count)
+            // nothing read: every line of every file, split on its delimiter; not for a read of one file, which
+            // would read all of them
+            if (0 == ((IGPALFileInternal)inputFile).FileSettings.FileGrid.Count && 0 > onlyFileIdx)
                 FileHelper.GetGrid(((IGPALFileInternal)inputFile).FileSettings, out tokens);
             else
                 tokens = ((IGPALFileInternal)inputFile).FileSettings.FileGrid;
+
+            // A workflow uses the grid alone, so the text and dictionaries made on the way to it are let go. It gets a
+            // list of its own, so the next read of the file, which empties the file's list, does not empty the one a
+            // fill is going through.
+            if (true == forWorkflow)
+            {
+                ((IGPALFileInternal)inputFile).FileData.Clear();
+                ((IGPALFileInternal)inputFile).FileDictionary.Clear();
+                tokens = new List<IGPALGrid<string>>(tokens);
+            }
 
             ((IGPALFileInternal)inputFile).TokenList = tokens;
             ((IGPALFileInternal)inputFile).AlreadyTokenized = retval;
@@ -2371,6 +2639,530 @@ namespace GenerallyPositive
             }
         }
         /// <summary>
+        /// A filename without its extension, where a .gz counts its inner extension as part of it, so
+        /// "reports.csv.gz" is "reports" and ".csv.gz". A number added between the two then survives unpacking:
+        /// reports_0001.csv.gz unpacks to reports_0001.csv.
+        /// </summary>
+        /// <param name="filename">Filename, with or without a folder</param>
+        /// <param name="extension">The extension, ".csv.gz" for a .gz with one inside</param>
+        /// <returns>The filename without the folder or the extension</returns>
+        internal static string NameWithoutExtension(string filename, out string extension)
+        {
+            string name = Path.GetFileNameWithoutExtension(filename);
+            extension = Path.GetExtension(filename);
+
+            // a compressed single file, such as .csv.gz or .csv.bz2, keeps its inner extension with it
+            if (true == ExtensionList(GPAL.GPALSettings.GzExtensions).Concat(new[] { "bz2", "xz" }).Contains(extension.TrimStart('.').ToLowerInvariant()))
+            {
+                extension = Path.GetExtension(name) + extension;
+                name = Path.GetFileNameWithoutExtension(name);
+            }
+
+            return name;
+        }
+        /// <summary>
+        /// What a file holds, read from its first bytes rather than its name, so a download saved without .zip, or an
+        /// .xpi, .jar or .xlsx, is still recognized.
+        /// </summary>
+        /// <param name="filename">File to read</param>
+        /// <returns>".zip", ".7z", ".rar", ".tar" for a tar whether plain or inside a gz, bz2 or xz, ".gz", ".bz2" or
+        /// ".xz" for one compressed file, or null for anything else</returns>
+        internal static string ArchiveType(string filename)
+        {
+            byte[] start = new byte[512];
+            int read = 0;
+
+            using (FileStream stream = System.IO.File.OpenRead(filename))
+                read = ReadStart(stream, start);
+
+            // PK 03 04 starts a zip with entries and PK 05 06 an empty one; 7z and rar have their own signatures; a tar
+            // header adds up to its own checksum. 1F 8B starts a gzip, BZh a bz2 and FD 37 7A 58 5A 00 an xz; each is a
+            // tar when what it holds starts with a tar header, otherwise one compressed file
+            string compressed = true == StartsWith(start, read, 0x1F, 0x8B) ? ".gz"
+                              : true == StartsWith(start, read, 0x42, 0x5A, 0x68) ? ".bz2"
+                              : true == StartsWith(start, read, 0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00) ? ".xz"
+                              : null;
+
+            return true == StartsWith(start, read, 0x50, 0x4B, 0x03, 0x04) || true == StartsWith(start, read, 0x50, 0x4B, 0x05, 0x06) ? ".zip"
+                 : true == StartsWith(start, read, 0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C) ? ".7z"
+                 : true == StartsWith(start, read, 0x52, 0x61, 0x72, 0x21, 0x1A, 0x07) ? ".rar"
+                 : true == IsTar(start, read) ? ".tar"
+                 : null != compressed ? (true == CompressedHoldsTar(filename, compressed) ? ".tar" : compressed)
+                 : null;
+        }
+        /// <summary>
+        /// Reads from the start of a stream until the buffer is full or the stream ends, since one Read can return less.
+        /// </summary>
+        /// <param name="stream">Stream to read</param>
+        /// <param name="buffer">Buffer to fill</param>
+        /// <returns>How many bytes were read</returns>
+        private static int ReadStart(Stream stream, byte[] buffer)
+        {
+            int total = 0;
+            int read = -1;
+
+            while (total < buffer.Length && 0 != read)
+            {
+                read = stream.Read(buffer, total, buffer.Length - total);
+                total += read;
+            }
+
+            return total;
+        }
+        /// <summary>
+        /// True when the first bytes read are the signature given.
+        /// </summary>
+        /// <param name="buffer">The bytes read</param>
+        /// <param name="read">How many were read</param>
+        /// <param name="signature">The bytes a format starts with</param>
+        /// <returns>True when they match</returns>
+        private static bool StartsWith(byte[] buffer, int read, params int[] signature)
+        {
+            bool matches = read >= signature.Length;
+
+            for (int index = 0; true == matches && index < signature.Length; index++)
+                matches = signature[index] == buffer[index];
+
+            return matches;
+        }
+        /// <summary>
+        /// True when the bytes are the start of a tar. Not every tar says ustar at byte 257, older and GNU ones do not,
+        /// so the header is checked against its own checksum: the octal number at byte 148 is the sum of the header's
+        /// 512 bytes, counting the checksum's own 8 as spaces.
+        /// </summary>
+        /// <param name="buffer">The first bytes</param>
+        /// <param name="read">How many were read</param>
+        /// <returns>True for a tar</returns>
+        private static bool IsTar(byte[] buffer, int read)
+        {
+            string recorded = 512 <= read ? Encoding.ASCII.GetString(buffer, 148, 8).Trim(' ', '\0') : string.Empty;
+            int sum = 0;
+
+            for (int index = 0; index < 512 && 512 <= read; index++)
+                sum += 148 <= index && 156 > index ? (int)' ' : buffer[index];
+
+            // an all-zero block also adds up, to 256, so a tar's first header must have a name
+            return 0 < recorded.Length && true == recorded.All(digit => '0' <= digit && '7' >= digit)
+                && sum == Convert.ToInt32(recorded, 8) && 0 != buffer[0];
+        }
+        /// <summary>
+        /// True when a gz, bz2 or xz holds a tar, as a .tar.gz, .tgz, .tar.bz2 or .tar.xz does. A file that will not
+        /// decompress is not a tar, so it is left to open as the one file it claims to be, and fails there if it is not.
+        /// </summary>
+        /// <param name="filename">The compressed file</param>
+        /// <param name="compression">".gz", ".bz2" or ".xz"</param>
+        /// <returns>True when what it holds starts with a tar header</returns>
+        private static bool CompressedHoldsTar(string filename, string compression)
+        {
+            byte[] start = new byte[512];
+            int read = 0;
+
+            try
+            {
+                using (FileStream input = System.IO.File.OpenRead(filename))
+                using (Stream decompressed = Decompressing(input, compression))
+                    read = ReadStart(decompressed, start);
+            }
+            catch (Exception ex)
+            {
+                // a text file that happens to start BZh, for one
+                GPAL.PublishSimpleEvent(GPALEventType.DEBUG, $"[{filename}] does not decompress as [{compression}]: [{ex.GetType().Name}]");
+            }
+
+            return IsTar(start, read);
+        }
+        /// <summary>
+        /// A stream that decompresses a gz, bz2 or xz as it is read.
+        /// </summary>
+        /// <param name="input">The compressed file</param>
+        /// <param name="compression">".gz", ".bz2" or ".xz"</param>
+        /// <returns>The decompressing stream; disposing it disposes the input</returns>
+        private static Stream Decompressing(Stream input, string compression)
+        {
+            return ".bz2" == compression ? SharpCompress.Compressors.BZip2.BZip2Stream.Create(input, SharpCompress.Compressors.CompressionMode.Decompress, true, false, false)
+                 : ".xz" == compression ? (Stream)new SharpCompress.Compressors.Xz.XZStream(input)
+                 : new System.IO.Compression.GZipStream(input, System.IO.Compression.CompressionMode.Decompress);
+        }
+        /// <summary>
+        /// The archive a path goes through, as in C:\work\export.zip\*.csv: the first part of the path that is a file
+        /// holding a zip, gz, 7z, rar or tar, with more path after it. A path through only folders has none.
+        /// </summary>
+        /// <param name="path">Path WithFileName was given</param>
+        /// <returns>The archive's path, or null when the path goes through no archive</returns>
+        internal static string ArchiveInPath(string path)
+        {
+            char[] separators = { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar };
+            string archive = null;
+
+            for (int index = path.IndexOfAny(separators); null == archive && index >= 0; index = path.IndexOfAny(separators, index + 1))
+            {
+                string before = path.Substring(0, index);
+
+                if (true == System.IO.File.Exists(before) && null != ArchiveType(before))
+                    archive = before;
+            }
+
+            return archive;
+        }
+        /// <summary>
+        /// The extensions a url may name an archive by when a wildcard follows it, as in .../export.zip/*.csv: those in
+        /// zipExtensions and gzExtensions in gpal.yaml, and 7z, rar, tar, tgz, bz2 and xz.
+        /// </summary>
+        /// <returns>The extensions as a regular expression alternation</returns>
+        internal static string ArchiveExtensionPattern()
+        {
+            return string.Join("|", ExtensionList(GPAL.GPALSettings.ZipExtensions)
+                .Concat(ExtensionList(GPAL.GPALSettings.GzExtensions))
+                .Concat(new[] { "7z", "rar", "tar", "tgz", "bz2", "xz" })
+                .Select(extension => Regex.Escape(extension)));
+        }
+        /// <summary>
+        /// The extensions in a gpal.yaml list such as "zip, xpi, jar", without dots, in lower case.
+        /// </summary>
+        /// <param name="extensions">The list, separated by commas, semicolons or spaces</param>
+        /// <returns>Each extension</returns>
+        private static List<string> ExtensionList(string extensions)
+        {
+            return (extensions ?? string.Empty)
+                .Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(extension => extension.Trim().TrimStart('.').ToLowerInvariant())
+                .Where(extension => 0 < extension.Length)
+                .ToList();
+        }
+        /// <summary>
+        /// What SaveTo writes for a destination name: a .tar.gz or .tgz is a gzipped tar, a .tar a tar, an extension in
+        /// zipExtensions a zip, one in gzExtensions a gz, and a .7z a 7z. A rar can be opened but not written.
+        /// </summary>
+        /// <param name="name">The destination's name</param>
+        /// <returns>".zip", ".gz", ".tar", ".tar.gz", ".7z", ".rar" for the read-only one, or null for anything else</returns>
+        internal static string ArchiveFormat(string name)
+        {
+            string lower = name.ToLowerInvariant();
+            string extension = Path.GetExtension(lower).TrimStart('.');
+
+            return true == lower.EndsWith(".tar.gz") || true == lower.EndsWith(".tgz") ? ".tar.gz"
+                 : true == lower.EndsWith(".tar") ? ".tar"
+                 : true == lower.EndsWith(".7z") ? ".7z"
+                 : true == lower.EndsWith(".rar") ? ".rar"
+                 : true == ExtensionList(GPAL.GPALSettings.ZipExtensions).Contains(extension) ? ".zip"
+                 : true == ExtensionList(GPAL.GPALSettings.GzExtensions).Contains(extension) ? ".gz"
+                 : null;
+        }
+        /// <summary>
+        /// Takes the files a path names inside an archive out to GPAL's temp directory, into a folder named after the
+        /// archive and where it is, with ".contents" added. Inside works as it does in a folder: "*.csv" matches the csv
+        /// files at the top of the archive, "data\*.csv" the ones in its data folder, and a name with no wildcard that
+        /// one file.<br/>
+        /// A gz, bz2 or xz that is not a tar holds one file, named as the archive without its extension.<br/>
+        /// Only the matching files are written, and they replace what an earlier unpack of the same archive left there.
+        /// </summary>
+        /// <param name="archive">The zip, 7z, rar, tar, gz, bz2 or xz</param>
+        /// <param name="inside">The path inside it, wildcards allowed</param>
+        /// <returns>The files written, in the order the archive holds them</returns>
+        internal static List<string> ExtractFromArchive(string archive, string inside)
+        {
+            List<string> extracted = new List<string>();
+            string type = ArchiveType(archive);
+
+            // Named after the archive and where it is, so export.zip from two folders unpacks to two places
+            string where;
+            using (System.Security.Cryptography.SHA256 sha = System.Security.Cryptography.SHA256.Create())
+                where = BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(Path.GetFullPath(archive).ToLowerInvariant())), 0, 4).Replace("-", string.Empty);
+
+            string contents = Path.Combine(GPAL.TempDirectory(), Path.GetFileName(archive) + "." + where + ".contents");
+            string wanted = inside.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+            string wantedFolder = Path.GetDirectoryName(wanted) ?? string.Empty;
+
+            // the wildcard in the last part, as Windows matches it: * any run of characters, ? any one
+            Regex wantedName = new Regex("^" + Regex.Escape(Path.GetFileName(wanted)).Replace(@"\*", ".*").Replace(@"\?", ".") + "$", RegexOptions.IgnoreCase);
+
+            if (".gz" == type || ".bz2" == type || ".xz" == type)
+            {
+                // one file, named as the archive without its extension
+                string name = Path.GetFileNameWithoutExtension(archive);
+                string target = 0 == wantedFolder.Length && true == wantedName.IsMatch(name) ? Path.Combine(contents, name) : null;
+
+                if (null != target)
+                    using (FileStream input = System.IO.File.OpenRead(archive))
+                    using (Stream decompressed = Decompressing(input, type))
+                        SaveEntry(decompressed, target, System.IO.File.GetLastWriteTime(archive), extracted);
+            }
+            else if (".zip" == type)
+            {
+                using (System.IO.Compression.ZipArchive zip = System.IO.Compression.ZipFile.OpenRead(archive))
+                    foreach (System.IO.Compression.ZipArchiveEntry entry in zip.Entries)
+                    {
+                        // a folder entry has no name of its own
+                        string target = 0 < entry.Name.Length ? EntryTarget(entry.FullName, wantedFolder, wantedName, contents, archive) : null;
+
+                        if (null != target)
+                            using (Stream input = entry.Open())
+                                SaveEntry(input, target, entry.LastWriteTime.DateTime, extracted);
+                    }
+            }
+            else
+            {
+                // A 7z is opened as an archive and read straight through, which also keeps a solid one from being
+                // unpacked again for every entry. A rar, and a tar whether plain or inside a gz, bz2 or xz, are read
+                // straight through
+                using (FileStream input = System.IO.File.OpenRead(archive))
+                using (SharpCompress.Archives.IArchive sevenZip = ".7z" == type ? SharpCompress.Archives.ArchiveFactory.OpenArchive(input, new SharpCompress.Readers.ReaderOptions()) : null)
+                using (SharpCompress.Readers.IReader reader = null != sevenZip ? sevenZip.ExtractAllEntries() : SharpCompress.Readers.ReaderFactory.OpenReader(input, new SharpCompress.Readers.ReaderOptions()))
+                    while (true == reader.MoveToNextEntry())
+                    {
+                        string target = false == reader.Entry.IsDirectory ? EntryTarget(reader.Entry.Key, wantedFolder, wantedName, contents, archive) : null;
+
+                        if (null != target)
+                            using (Stream entryStream = reader.OpenEntryStream())
+                                SaveEntry(entryStream, target, reader.Entry.LastModifiedTime, extracted);
+                    }
+            }
+
+            GPAL.PublishSimpleEvent(GPALEventType.INFO, $"[{extracted.Count}] file(s) matching [{inside}] taken out of [{archive}] to [{contents}]");
+
+            return extracted;
+        }
+        /// <summary>
+        /// Where an archive entry is written when it is one the path asked for: in the folder asked for, with a name the
+        /// wildcard matches. A leading ./ some tars put on every entry is ignored.
+        /// </summary>
+        /// <param name="entryName">The entry's path inside the archive</param>
+        /// <param name="wantedFolder">The folder inside the archive the path named, empty for the top</param>
+        /// <param name="wantedName">The file name or wildcard the path named</param>
+        /// <param name="contents">The folder the archive is unpacked into</param>
+        /// <param name="archive">The archive, for the message when an entry points outside contents</param>
+        /// <returns>The full path to write, or null when the entry was not asked for</returns>
+        private static string EntryTarget(string entryName, string wantedFolder, Regex wantedName, string contents, string archive)
+        {
+            string entryPath = Regex.Replace(entryName.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar), @"^(\.\\|\\)+", string.Empty);
+            string target = null;
+
+            if (true == string.Equals(Path.GetDirectoryName(entryPath) ?? string.Empty, wantedFolder, StringComparison.OrdinalIgnoreCase)
+                && true == wantedName.IsMatch(Path.GetFileName(entryPath)))
+            {
+                string full = Path.GetFullPath(Path.Combine(contents, entryPath));
+
+                // an entry named with ..\ would land outside the contents folder, so it is left in the archive
+                if (true == full.StartsWith(Path.GetFullPath(contents) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                    target = full;
+                else
+                    GPAL.PublishSimpleEvent(GPALEventType.WARNING, $"[{entryName}] in [{archive}] points outside [{contents}], so it was not taken out");
+            }
+
+            return target;
+        }
+        /// <summary>
+        /// Writes one entry out of an archive, keeping its date, and adds it to the list taken out.
+        /// </summary>
+        /// <param name="input">The entry's contents</param>
+        /// <param name="target">Where to write it; a file already there is replaced</param>
+        /// <param name="written">The entry's date, when the archive has one</param>
+        /// <param name="extracted">The files taken out so far</param>
+        private static void SaveEntry(Stream input, string target, DateTime? written, List<string> extracted)
+        {
+            EnsureFolderFor(target);
+
+            using (FileStream output = new FileStream(target, FileMode.Create))
+                input.CopyTo(output);
+
+            if (null != written)
+                System.IO.File.SetLastWriteTime(target, written.Value);
+
+            extracted.Add(target);
+        }
+        /// <summary>
+        /// The files SaveTo packs and the name each has inside the archive. A file goes in at the top under its own name;
+        /// a folder goes in whole, everything under it at its path inside the folder, so the folder's contents are the
+        /// top of the archive. A folder saved into itself leaves out the archive being written and the ones earlier runs
+        /// numbered from the same name; a file named on its own always goes in.
+        /// </summary>
+        /// <param name="sources">Files and folders</param>
+        /// <param name="requested">The archive's name before any numbering</param>
+        /// <returns>Each file with its name inside the archive</returns>
+        internal static List<(string file, string entry)> ArchiveEntries(List<string> sources, string requested)
+        {
+            List<(string file, string entry)> entries = new List<(string file, string entry)>();
+
+            foreach (string source in sources)
+            {
+                if (true == Directory.Exists(source))
+                {
+                    string folder = Path.GetFullPath(source).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+
+                    foreach (string file in Directory.GetFiles(folder, "*", SearchOption.AllDirectories).OrderBy(file => file, StringComparer.OrdinalIgnoreCase))
+                    {
+                        if (true == IsSaveOf(file, requested))
+                            GPAL.PublishSimpleEvent(GPALEventType.INFO, $"[{file}] left out of [{requested}], it is that archive or an earlier numbered one");
+                        else
+                            entries.Add((file, file.Substring(folder.Length)));
+                    }
+                }
+                else
+                    entries.Add((source, Path.GetFileName(source)));
+            }
+
+            return entries;
+        }
+        /// <summary>
+        /// True when a file is the archive SaveTo is about to write, or one an earlier run numbered from the same name,
+        /// so a folder saved into itself does not pack its own earlier archives.
+        /// </summary>
+        /// <param name="file">A file going into the archive</param>
+        /// <param name="target">The name SaveTo was given, before any numbering</param>
+        /// <returns>True when the file is that archive or a numbered copy of it</returns>
+        internal static bool IsSaveOf(string file, string target)
+        {
+            string baseName = NameWithoutExtension(target, out string extension);
+
+            return true == string.Equals(Path.GetDirectoryName(Path.GetFullPath(file)), Path.GetDirectoryName(Path.GetFullPath(target)), StringComparison.OrdinalIgnoreCase)
+                && true == Regex.IsMatch(Path.GetFileName(file), "^" + Regex.Escape(baseName) + @"(_?[\d_]+)?" + Regex.Escape(extension) + "$", RegexOptions.IgnoreCase);
+        }
+        /// <summary>
+        /// Writes files into one new zip, tar or 7z, keeping each one's date. A tar can be gzipped as it is written, and a
+        /// 7z is compressed with LZMA2, as 7-Zip does by default.<br/>
+        /// A file that cannot be opened is published and left out, and the rest are still saved. A file whose read fails
+        /// partway is published and the archive is removed: a zip would hold it cut short, and in a tar or 7z everything
+        /// after it would be damaged.
+        /// </summary>
+        /// <param name="entries">Each file and its name inside the archive</param>
+        /// <param name="target">The archive to write; one already there is replaced</param>
+        /// <param name="format">".zip", ".tar", ".tar.gz" or ".7z"</param>
+        internal static void WriteArchive(List<(string file, string entry)> entries, string target, string format)
+        {
+            int saved = 0;
+            bool damaged = false;
+
+            EnsureFolderFor(target);
+
+            using (FileStream output = new FileStream(target, FileMode.Create))
+            {
+                if (".zip" == format)
+                {
+                    using (System.IO.Compression.ZipArchive zip = new System.IO.Compression.ZipArchive(output, System.IO.Compression.ZipArchiveMode.Create))
+                        for (int index = 0; index < entries.Count && false == damaged; index++)
+                        {
+                            (string file, string entry) item = entries[index];
+                            FileStream input = null;
+
+                            // Opened before the entry is made, so a file that cannot be opened leaves no entry behind and
+                            // the rest go in
+                            try
+                            {
+                                input = System.IO.File.OpenRead(item.file);
+                            }
+                            catch (Exception ex)
+                            {
+                                GPAL.PublishSimpleEvent(GPALEventType.EXCEPTION, $"Unable to add [{item.file}] to [{target}], it is saved without it.", null, GPALObjectType.GPALFile, ex);
+                            }
+
+                            // A read that fails partway would leave the file cut short inside a zip that still tests as
+                            // sound, so the archive stops there
+                            if (null != input)
+                                using (input)
+                                    try
+                                    {
+                                        // a zip holds dates from 1980 to 2107 only, so a date outside that is moved to the nearest end
+                                        DateTime written = System.IO.File.GetLastWriteTime(item.file);
+                                        DateTime zipDate = written < new DateTime(1980, 1, 1) ? new DateTime(1980, 1, 1)
+                                                         : written > new DateTime(2107, 12, 31) ? new DateTime(2107, 12, 31)
+                                                         : written;
+
+                                        // a zip names folders with forward slashes
+                                        System.IO.Compression.ZipArchiveEntry entry = zip.CreateEntry(item.entry.Replace(Path.DirectorySeparatorChar, '/'), System.IO.Compression.CompressionLevel.Optimal);
+
+                                        entry.LastWriteTime = zipDate;
+                                        using (Stream entryStream = entry.Open())
+                                            input.CopyTo(entryStream);
+
+                                        saved++;
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        damaged = true;
+                                        GPAL.PublishSimpleEvent(GPALEventType.EXCEPTION, $"Reading [{item.file}] failed partway, and [{target}] cannot be finished without it, so it was not saved.", null, GPALObjectType.GPALFile, ex);
+                                    }
+                        }
+                }
+                else
+                {
+                    SharpCompress.Common.ArchiveType type = ".7z" == format ? SharpCompress.Common.ArchiveType.SevenZip : SharpCompress.Common.ArchiveType.Tar;
+                    SharpCompress.Common.Options.IWriterOptions options = ".7z" == format
+                        ? new SharpCompress.Writers.SevenZip.SevenZipWriterOptions(SharpCompress.Common.CompressionType.LZMA2)
+                        : (SharpCompress.Common.Options.IWriterOptions)new SharpCompress.Writers.WriterOptions(".tar.gz" == format ? SharpCompress.Common.CompressionType.GZip : SharpCompress.Common.CompressionType.None);
+
+                    using (SharpCompress.Writers.IWriter writer = SharpCompress.Writers.WriterFactory.OpenWriter(output, type, options))
+                        for (int index = 0; index < entries.Count && false == damaged; index++)
+                        {
+                            (string file, string entry) item = entries[index];
+                            FileStream input = null;
+
+                            // a file that cannot be opened has written nothing yet, so it is left out and the rest go in
+                            try
+                            {
+                                input = System.IO.File.OpenRead(item.file);
+                            }
+                            catch (Exception ex)
+                            {
+                                GPAL.PublishSimpleEvent(GPALEventType.EXCEPTION, $"Unable to add [{item.file}] to [{target}], it is saved without it.", null, GPALObjectType.GPALFile, ex);
+                            }
+
+                            // A read that fails partway has already written part of the file, which a tar or 7z cannot take
+                            // back, and every file after it would be damaged, so the archive stops there
+                            if (null != input)
+                                using (input)
+                                    try
+                                    {
+                                        // a tar and a 7z name folders with forward slashes
+                                        writer.Write(item.entry.Replace(Path.DirectorySeparatorChar, '/'), input, System.IO.File.GetLastWriteTime(item.file));
+                                        saved++;
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        damaged = true;
+                                        GPAL.PublishSimpleEvent(GPALEventType.EXCEPTION, $"Reading [{item.file}] failed partway, and [{target}] cannot be finished without it, so it was not saved.", null, GPALObjectType.GPALFile, ex);
+                                    }
+                        }
+                }
+            }
+
+            // A damaged archive is removed rather than left looking finished. A 7z holding nothing gets 7-Zip's own empty
+            // archive, since the writer only starts one when the first file goes in
+            if (true == damaged)
+                System.IO.File.Delete(target);
+            else
+            {
+                if (".7z" == format && 0 == saved)
+                    System.IO.File.WriteAllBytes(target, EMPTY_7Z);
+
+                GPAL.PublishSimpleEvent(GPALEventType.INFO, $"[{saved}] file(s) saved to [{target}]");
+            }
+        }
+        /// <summary>
+        /// A 7z with no files in it, as 7-Zip writes one: the signature, version 0.4, and a start header pointing at no
+        /// next header, with the CRC of those twenty zero bytes.
+        /// </summary>
+        private static readonly byte[] EMPTY_7Z =
+        {
+            0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C, 0x00, 0x04, 0x8D, 0x9B, 0xD5, 0x0F, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+        };
+        /// <summary>
+        /// Writes one file gzipped.
+        /// </summary>
+        /// <param name="file">File to compress</param>
+        /// <param name="target">The .gz to write; one already there is replaced</param>
+        internal static void WriteGz(string file, string target)
+        {
+            EnsureFolderFor(target);
+
+            using (FileStream input = System.IO.File.OpenRead(file))
+            using (FileStream output = new FileStream(target, FileMode.Create))
+            using (System.IO.Compression.GZipStream gz = new System.IO.Compression.GZipStream(output, System.IO.Compression.CompressionMode.Compress))
+                input.CopyTo(gz);
+
+            GPAL.PublishSimpleEvent(GPALEventType.INFO, $"[{file}] saved to [{target}]");
+        }
+        /// <summary>
         /// Adds a trailing backslash to a directory path when it does not already have one, so the path can be
         /// concatenated without producing a double separator or gluing the directory to the filename.
         /// </summary>
@@ -2381,7 +3173,6 @@ namespace GenerallyPositive
             // Check if the directory path already ends with '\'
             if (!directoryPath.EndsWith("\\"))
             {
-                // If not, add '\'
                 directoryPath += "\\";
             }
             return directoryPath;

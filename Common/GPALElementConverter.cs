@@ -100,7 +100,7 @@ namespace GenerallyPositive
                         }
                     }
 
-                    // Final check — only add if we have something useful
+                    // Add the element only when it has attributes
                     if (element != null && element.Attributes != null && element.Attributes.Count > 0)
                     {
                         // commented: fired per element during bulk deserialize

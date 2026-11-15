@@ -84,7 +84,7 @@ namespace GenerallyPositive
             }
             catch
             {
-                // can't determine who is the top window, so go ahead and top it
+                // The foreground window's owner could not be read, so bring the main window forward.
             }
 
             try
@@ -98,7 +98,6 @@ namespace GenerallyPositive
                 //// Simulate an "VK_ALT" key release.
                 //keybd_event((byte)VK_ALT, 0x45, EXTENDEDKEY | KEYUP, 0);
 
-                // Show window in forground.
                 SetForegroundWindow(process.MainWindowHandle);
             }
             catch (Exception ex)
@@ -127,16 +126,17 @@ namespace GenerallyPositive
         /// <returns>0 - we are done<br>1 - loop again</br></returns>
         public static void FillInWithTokens<T>(Application.Application application, IGPALGrid<T> tokens, WriteMode writeMode)
         {
+            // row i of controls takes row i of tokens and CallAfterFillIn runs after each row, as in the browser
+            // version; the controls are found again for the rows of tokens left
+            int tokenIdx = 0;
+
             while (true)
             {
-                int tokenIdx = 0;
                 List<ReadOnlyCollection<GPALAutomationElement>> rowsOfColumns = new List<ReadOnlyCollection<GPALAutomationElement>>();
                 List<ReadOnlyCollection<GPALAutomationElement>> rowsOfElements = new List<ReadOnlyCollection<GPALAutomationElement>>();
-                // a column-wise list of the selector info to match with the column of matched/returned elements to know how to interact with that column of elemnts
-                // of course selectors are always a 'column'
+                // Each selector is a column; this holds each column's interaction settings, in column order.
                 List<SmallSelectorNode> interactionInfo = new List<SmallSelectorNode>();
 
-                // waitfor did not match if returns false
                 int rowCnt = 0;
                 // A local, as in the browser version, so every grid fill starts from zero.
                 int lastRowCnt = 0;
@@ -171,8 +171,7 @@ namespace GenerallyPositive
                         int tmpIdx = 0;
                         // add the indices of the matched items
                         // when we build the grid, we will only get rows that matched
-                        // CAVEAT: NO 'AND' on selector MATCH
-                        // only 'OR' operator, all those that match on different selectors
+                        // CAVEAT: selector matches combine with OR only; a row is kept when any selector matched it
                         foreach (GPALAutomationElement webElement in matchedElems)
                             if (-1 != (tmpIdx = tmpElems.IndexOf(webElement)))
                                 if (false == application.CurrentUOW.MatchedRowIndexes.Contains(new KeyValuePair<int, string>(tmpIdx, sel.AttributeName)))
@@ -185,7 +184,7 @@ namespace GenerallyPositive
 
                     // if we returned elements, add an entry for this selector in interactionInfo, we consume it below
                     if (0 < matchedElems?.Count || 0 < tmpElems?.Count)
-                        interactionInfo.Add(new SmallSelectorNode() { InteractionType = sel.InteractionType, OffsetX = sel.DeltaX, OffsetY = sel.DeltaY, DeltaX = sel.DeltaY, DeltaY = sel.DeltaY });
+                        interactionInfo.Add(new SmallSelectorNode() { InteractionType = sel.InteractionType, OffsetX = sel.OffsetX, OffsetY = sel.OffsetY, DeltaX = sel.DeltaX, DeltaY = sel.DeltaY });
                 }
 
                 // we have partial matches from one or more selectors, so construct the grid only from matched rows
@@ -239,7 +238,7 @@ namespace GenerallyPositive
                                 case "text":
                                 case "edit":
                                     // add the element we will work with as a column to the current row list
-                                    application.CurrentUOW.ElementGrid[rowCnt++].Add(
+                                    application.CurrentUOW.ElementGrid[rowCnt].Add(
                                         new UnitOfWork.ElementNode()
                                         {
                                             AutomationElement = elem.Ae,
@@ -253,68 +252,84 @@ namespace GenerallyPositive
                                     break;
                             }
 
+                            // every element is one row of its column, so the next element goes in the next row
+                            // whether or not this one was added
+                            rowCnt++;
+
                             // only add as many rows as was asked for
                             // all or only save up to withallthatmatch row count
                             if (rowCnt >= application.CurrentUOW.WithAllThatMatch)
                                 break;
                         }
+
+                        // each column that has elements has its own entry in interactionInfo
+                        if (0 < rowOfColumns.Count)
+                            columnIdx++;
                     }
                 }
 
-                // TODO: CAVEAT: do we have concept of next page in apps? prolly? if we still have tokens and are done, shouldn't we get a next page or bail
-                // BUG: IF WE consume all out tokens, why would we loop again (while true)
+                int tokenIdxAtPassStart = tokenIdx;
 
-                // keep looping while we have tokens
-                // but after dealing with the first round of tokens, with more to go
+                // fill from the next row of tokens
                 if (tokenIdx < tokens.Count())
                 {
-                    // we now have our elements in rows and columns
-                    // iterate over the tokens, in rows and columns to fill in the text
+                    // row i of controls takes row i of tokens, a token per control, and CallAfterFillIn runs after each
+                    // row, as in the browser version; the next pass finds the controls again for the rows of tokens left
                     foreach (List<UnitOfWork.ElementNode> elementNode in application.CurrentUOW.ElementGrid)    // get one row of elements
                     {
+                        if (tokenIdx == tokens.Count())
+                            break;
+
+                        // a row WithAllThatMatch made room for but nothing filled takes no row of tokens
+                        if (false == elementNode.Any(node => null != node))
+                            continue;
+
                         elementIdx = 0;   // each row starts at its first column
-                        List<T> currentRow = tokens[tokenIdx++];
+                        List<T> currentRow = tokens[tokenIdx];
 
                         foreach (T token in currentRow)                                            // iterate over tokens, filling in the corresponding input/textarea webelement
                         {
                             if (elementIdx < elementNode.Count && null != elementNode[elementIdx])
                             {
-                                if (InteractionType.Hardware == elementNode[elementIdx].InteractionType)
+                                // hardware where the real keyboard reaches; on a hidden desktop, UIAutomation
+                                if (InteractionType.Hardware == elementNode[elementIdx].InteractionType && true == ElementHelper.HardwareReaches(application))
                                     ElementHelper.HardwareFillInFrom(application, new GPALAutomationElement(elementNode[elementIdx].AutomationElement), elementNode[elementIdx].OffsetX, elementNode[elementIdx].OffsetY, token.ToString(), writeMode);
                                 else
                                     ElementHelper.FillInFrom(application, elementNode[elementIdx].AutomationElement, elementNode[elementIdx], token.ToString(), writeMode);
                             }
                             else
-                                // detect if we have too many tokens to consume and publish an information event [entirely possible this scenario is fine]
+                                // more tokens in the row than controls: warn about each unused token
                                 GPAL.PublishSimpleEvent(GPALEventType.WARNING, $"Unused token [{token}] from tokens [{string.Join(",", currentRow)}]", application, GPALObjectType.Application);
                             elementIdx++;   // increment the column [element] count for each token. if we have a token, we are expecting elements for it.
                         }
 
-                        // detect if we do not have enough tokens for all the form fields [entirely possible this scenario is fine]
-                        // we got here and finished our tokens but have not exhausted our columns [elements]
+                        // fewer tokens in the row than controls: warn about each control left without one
                         while (elementIdx < elementNode.Count && null != elementNode[elementIdx])
                         {
                             GPAL.PublishSimpleEvent(GPALEventType.WARNING, $"No token for control: [{elementNode[elementIdx].AutomationElement.Current.LocalizedControlType}]", application, GPALObjectType.Application);
-                            elementIdx++;   // once per control. Incrementing in the guard and again in the body skipped every other one and read past the end
+                            elementIdx++;   // once per control, here only, so no control is skipped
                         }
-                    }
 
-                    UnitOfWork safeUOW = application.CurrentUOW;
-                    CallIfStatus handled = CallIfStatus.NotHandled;
+                        UnitOfWork safeUOW = application.CurrentUOW;
+                        CallIfStatus handled = CallIfStatus.NotHandled;
 
-                    // CAVEAT: there is no concept of 'handled (1)' vs 'not handled (0)' but definitely can request to exit
-                    // now that we have a list of grids, maybe we have 2/3, next token/grid ?
-                    if (null != application.CurrentUOW.AppCallAfterFillIn)
-                        handled = application.CurrentUOW.AppCallAfterFillIn(application, (IGPALGrid<string>)tokens, tokenIdx);
+                        // CAVEAT: Handled and NotHandled are treated the same; only Terminate is acted on
+                        if (null != application.CurrentUOW.AppCallAfterFillIn && true == rowsOfColumns.Any())
+                        {
+                            GPAL.PublishSimpleEvent(GPALEventType.INFO, $"Invoking CallAfterFillIn [{application.CurrentUOW.AppCallAfterFillIn.Method.Name}]", application, GPALObjectType.Application);
+                            handled = application.CurrentUOW.AppCallAfterFillIn(application, (IGPALGrid<string>)tokens, tokenIdx);
+                        }
 
-                    // CAVEAT: kludge - the call after handler can and probably will set a new current unit of work, but we need our old current unit
-                    // the call after handler UOW is no longer in scope, so restore our UOW
-                    application.CurrentUOW = safeUOW;
+                        // KLUDGE: the CallAfterFillIn handler can start a new current unit of work, so the one saved before the call is restored
+                        application.CurrentUOW = safeUOW;
 
-                    if (CallIfStatus.Terminate == handled)
-                    {
-                        GPAL.PublishSimpleEvent(GPALEventType.INFO, $"CallAfterFillIn handler requested program termination.", application, GPALObjectType.Application);
-                        throw new GPALException($"{GPAL.MyMethodName()}: CallAfterFillIn handler requested program termination.");
+                        if (CallIfStatus.Terminate == handled)
+                        {
+                            GPAL.PublishSimpleEvent(GPALEventType.INFO, $"CallAfterFillIn handler requested program termination.", application, GPALObjectType.Application);
+                            throw new GPALException($"{GPAL.MyMethodName()}: CallAfterFillIn handler requested program termination.");
+                        }
+
+                        tokenIdx++;
                     }
                 }
                 else
@@ -322,13 +337,12 @@ namespace GenerallyPositive
 
                 lastRowCnt += rowCnt;   // the total number of rows we are returning, also when looping thru after the first time, add to the end after the last row
 
-                // we are out of tokens, break out
-                // if we have more tokens, shouldn't we go to another page?
-                // CAVEAT: BUG: we are just looping back thru the same selectors and consuming more tokens, so does that mean CallAfterFillIn will do something and this is the behavior we want?
-                // or do we break because we have more tokens then elements? or should we loop?
-                // why did i put this in a while true loop?
-                if (tokenIdx == tokens.Count())
-                    break;   // continue, loop into us again, we have more tokens to consume
+                // Stop when every token is used, or when this pass found no row to fill, since the next pass finds the same.
+                if (tokenIdx < tokens.Count() && tokenIdx == tokenIdxAtPassStart)
+                    GPAL.PublishSimpleEvent(GPALEventType.WARNING, $"No controls to fill, so [{tokens.Count() - tokenIdx}] row(s) of tokens are not used", application, GPALObjectType.Application);
+
+                if (tokenIdx == tokens.Count() || tokenIdx == tokenIdxAtPassStart)
+                    break;
             }
             return;
         }

@@ -29,28 +29,6 @@ using static GenerallyPositive.Enums;
 
 namespace GenerallyPositive
 {
-    public class GoogleSheetsConfig
-    {
-        public string SheetsApiBase { get; set; } = "https://sheets.googleapis.com";
-        public string ScriptsApiBase { get; set; } = "https://script.googleapis.com";
-        public string SpreadsheetEndPoint { get; set; } = "/v4/spreadsheets/";
-        public string ReadRangeEndpoint { get; set; } = "/v4/spreadsheets/{0}/values/{1}!{2}";
-        public string WriteRangeEndpoint { get; set; } = "/v4/spreadsheets/{0}/values/{1}!{2}";
-        public string AppendRangeEndpoint { get; set; } = "/v4/spreadsheets/{0}/values/{1}!{2}:append";
-        public string FormatRangeEndpoint { get; set; } = "/v4/spreadsheets/{0}:batchUpdate";
-        public string ScriptContentEndpoint { get; set; } = "/v1/projects/{0}/content";
-        public string TriggerEndpoint { get; set; } = "/v1/projects/{0}/triggers";
-        public string AuthorizationHeader { get; set; } = "Authorization";
-        public string ValueInputOption { get; set; } = "?valueInputOption=RAW";
-        public string ScriptFileType { get; set; } = "SERVER_JS";
-        public string TitleField { get; set; } = "title";
-        public string HiddenField { get; set; } = "hidden";
-        public string Bearer { get; set; } = "Bearer";
-        public string UserEnteredFormatField { get; set; } = "userEnteredFormat";
-        public bool UseAppsScript { get; set; } = true; // Default to Apps Script mode
-        public string WebAppUrl { get; set; } // Store the deployed web app URL
-    }
-
     public class GoogleSheets : IGoogleSheets
     {
         internal string SpreadsheetId { get; private set; }
@@ -363,7 +341,7 @@ namespace GenerallyPositive
                 }
             }
 
-            // Note: Flattening grid to string; assuming user intent for single cell operations
+            // Every value in ReadData is joined with InsertSeparator and appended to the one cell
             if (googleSheetsConfig.UseAppsScript)
             {
                 var response = CallWebApp("AppendToCell", new { spreadsheetId = SpreadsheetId, sheetName = SheetName, cell, data = ReadData, separator = InsertSeparator });
@@ -800,7 +778,7 @@ namespace GenerallyPositive
                 catch { }
             }
 
-            // Hardcode the Apps Script content (or load from embedded resource)
+            // The Apps Script gateway content
             string scriptContent = ReadGatewayScript();
 
             this.WithProjectId(scriptId)
@@ -1724,7 +1702,7 @@ namespace GenerallyPositive
                 }
             }
 
-            // Improved regex to handle more A1 notation cases: A1, A1:B2, A:A, 1:1, A1:A, etc.
+            // A1 notation: A1, A1:B2, A:A, 1:1, A1:A, etc.
             var match = System.Text.RegularExpressions.Regex.Match(rangePart, @"^([A-Z]+)?(\d+)?(?::([A-Z]+)?(\d+)?)?$");
             if (!match.Success)
             {
@@ -2280,30 +2258,6 @@ namespace GenerallyPositive
         public IGoogleSheets ToGPALObject()
         {
             return this;
-        }
-    }
-
-    internal class ValueRange
-    {
-        public string range { get; set; }
-        public string majorDimension { get; set; }
-        public List<List<object>> values { get; set; }
-    }
-
-    internal class SpreadsheetResponse
-    {
-        public string SpreadsheetId { get; set; }
-        public List<Sheet> Sheets { get; set; }
-
-        public class Sheet
-        {
-            public SheetProperties Properties { get; set; }
-        }
-
-        public class SheetProperties
-        {
-            public string Title { get; set; }
-            public int SheetId { get; set; }
         }
     }
 }

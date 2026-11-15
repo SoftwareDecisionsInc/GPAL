@@ -64,7 +64,11 @@ namespace GenerallyPositive.Browser
         {
             if (null == ((Browser)browser).BrowserSettings.DriverLocation)
                 // driver is located with executable
+#if NET
+                ((Browser)browser).BrowserSettings.DriverLocation = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+#else
                 ((Browser)browser).BrowserSettings.DriverLocation = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().GetName().CodeBase).Substring(6);    // skip file:\\
+#endif
 
             string filePath = FileHelper.EnsureDirectoryEndsWithBackslash(((Browser)browser).BrowserSettings.DriverLocation) + $@"{GPAL.GPALSettings.EdgeDriverFilename}";
 
@@ -92,7 +96,7 @@ namespace GenerallyPositive.Browser
             Action<int, int, string> onProgress = (step, total, description) =>
                 GPAL.PublishSimpleEvent(Enums.GPALEventType.INFO, $"Patch step [{step}/{total}]: {description}", browser, Enums.GPALObjectType.Browser);
 
-            // Patch the executable file directly (no renaming the patched file)
+            // Patch the executable file in place
             if (PatchExe(filePath, onProgress))
             {
                 if (true == CheckIfPatched(filePath))

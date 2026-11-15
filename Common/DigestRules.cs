@@ -89,13 +89,13 @@ namespace GenerallyPositive
             "# ==================================================================" + Environment.NewLine +
             "# GPAL LLM Digest Rules" + Environment.NewLine +
             "#" + Environment.NewLine +
-            "# ruleSets     : GPAL owns these. They are regenerated from the built-in" + Environment.NewLine +
+            "# RuleSets     : GPAL owns these. They are regenerated from the built-in" + Environment.NewLine +
             "#                defaults whenever the GPAL version changes, so any edits" + Environment.NewLine +
             "#                made directly here are lost on the next version. Within a" + Environment.NewLine +
             "#                version this file is left as-is (it is the source of truth)." + Environment.NewLine +
-            "# userRuleSets : Yours. GPAL never changes anything in this section." + Environment.NewLine +
+            "# UserRuleSets : Yours. GPAL never changes anything in this section." + Environment.NewLine +
             "#                To take ownership of a GPAL rule set, move the whole entry" + Environment.NewLine +
-            "#                out of ruleSets and into userRuleSets. GPAL will not re-add" + Environment.NewLine +
+            "#                out of RuleSets and into UserRuleSets. GPAL will not re-add" + Environment.NewLine +
             "#                a rule set whose name it finds there, so your copy wins." + Environment.NewLine +
             "# ==================================================================" + Environment.NewLine;
 
@@ -138,7 +138,7 @@ namespace GenerallyPositive
             loaded.UserRuleSets = loaded.UserRuleSets ?? new List<DigestRuleSet>();
 
             // The GPAL section is taken from the built-in defaults for this run, so a workflow always runs
-            // the rules this build ships. A rule set the user has adopted into userRuleSets is never
+            // the rules this build ships. A rule set the user has adopted into UserRuleSets is never
             // re-added, so their copy is the one used for that name.
             var userNames = new HashSet<string>(
                 loaded.UserRuleSets.Select(r => r?.Name).Where(n => false == string.IsNullOrWhiteSpace(n)),
@@ -185,8 +185,7 @@ namespace GenerallyPositive
         /// </summary>
         private static void WriteConfigFile(DigestRulesConfig cfg, string path)
         {
-            // NOTE: the converter chooses its format from the file extension, so the temp file MUST end in
-            // .yaml or it will serialize as CSV.
+            // CAVEAT: the converter chooses its format from the file extension, so the temp file ends in .yaml.
             string tmp = path + ".gpaltmp.yaml";
             GPAL.Converter.WithInput(cfg).SaveTo((GPALFile)tmp);
 
@@ -194,8 +193,8 @@ namespace GenerallyPositive
             try { File.Delete(tmp); } catch { /* best effort */ }
 
             // Attach the section banners just above their YAML keys (banners are YAML comments, ignored on read).
-            yaml = Regex.Replace(yaml, @"(?m)^ruleSets:", GpalBanner + Environment.NewLine + "ruleSets:");
-            yaml = Regex.Replace(yaml, @"(?m)^userRuleSets:", Environment.NewLine + UserBanner + Environment.NewLine + "userRuleSets:");
+            yaml = Regex.Replace(yaml, @"(?m)^RuleSets:", GpalBanner + Environment.NewLine + "RuleSets:");
+            yaml = Regex.Replace(yaml, @"(?m)^UserRuleSets:", Environment.NewLine + UserBanner + Environment.NewLine + "UserRuleSets:");
 
             string full = FileHeader + yaml;
 

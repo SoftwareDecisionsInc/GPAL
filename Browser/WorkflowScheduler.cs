@@ -59,7 +59,7 @@ namespace GenerallyPositive.Browser
     ///             .ToGPALObject();
     ///
     ///         b.WithSelector(GPAL.CssSelector("#gh-ac")).FillInFrom("laptop").SendKey(GPAL.VK_ENTER);
-    ///         b.Close(true);
+    ///         b.Close();
     ///     })
     ///     .WithWorkflow(() =&gt;
     ///     {
@@ -70,7 +70,7 @@ namespace GenerallyPositive.Browser
     ///             .GoTo("https://www.walmart.com")
     ///             .ToGPALObject();
     ///
-    ///         b.Close(true);
+    ///         b.Close();
     ///     })
     ///     .WithMaxAtOnce(2)
     ///     .Run(out List&lt;WorkflowRun&gt; runs);   // two at a time, and what became of each

@@ -1,0 +1,75 @@
+﻿// =============================================================================
+// GPAL - Generally Positive Automation Library
+// Copyright © 2026 Software Decisions, Inc. All rights reserved.
+//
+// This file is part of GPAL.
+// Licensed under the Business Source License 1.1
+//
+// Primary development, architecture, and vision by Michael B. Vederman,
+// CEO of Software Decisions, Inc., Texas.
+//
+// Internal development maintained privately.
+// Public releases appear on GitHub: https://github.com/SoftwareDecisionsInc/GPAL.
+//
+// See LICENSE for full terms, including Additional Use Grant.
+// =============================================================================
+
+using System;
+using System.Collections.Generic;
+using System.Collections.Specialized;
+using System.Diagnostics;
+using System.Drawing;
+using System.IO;
+using System.Linq;
+using System.Net;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Threading;
+using System.Threading.Tasks;
+using GenerallyPositive;
+using GenerallyPositive.Application;
+using GenerallyPositive.Browser;
+using Org.BouncyCastle.Crypto;
+using Org.BouncyCastle.OpenSsl;
+using Org.BouncyCastle.Security;
+using static GenerallyPositive.Enums;
+
+namespace GenerallyPositive
+{
+    /// <summary>
+    /// A single vault item returned by the Dashlane CLI (`dcli password list --json`).
+    /// </summary>
+    public class DashlaneItem
+    {
+        /// <summary>
+        /// Unique identifier of the vault item.
+        /// </summary>
+        public string Id { get; set; }
+        /// <summary>
+        /// Display title of the vault item.
+        /// </summary>
+        public string Title { get; set; }
+        /// <summary>
+        /// URL associated with the vault item, used for matching against .WithDomain.
+        /// </summary>
+        public string Url { get; set; }
+        /// <summary>
+        /// Stored username/login.
+        /// </summary>
+        public string Username { get; set; }
+        /// <summary>
+        /// Stored password.
+        /// </summary>
+        public string Password { get; set; }
+        /// <summary>
+        /// One-time-password/TOTP secret, if configured for the item.
+        /// </summary>
+        public string Otp { get; set; }
+        /// <summary>
+        /// Free-form notes attached to the vault item.
+        /// </summary>
+        public string Notes { get; set; }
+    }
+}

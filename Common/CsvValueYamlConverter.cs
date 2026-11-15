@@ -25,7 +25,6 @@ using YamlDotNet.Serialization;
 
 namespace GenerallyPositive
 {
-    // written by grok
     public class CsvValue
     {
         public string Value { get; set; }

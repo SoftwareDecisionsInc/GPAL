@@ -20,7 +20,6 @@ using System.Linq;
 using System.Web;
 using static GenerallyPositive.Enums;
 
-// written by grok, modified by mbv
 namespace GenerallyPositive.Browser
 {
     /// <summary>
@@ -324,8 +323,7 @@ namespace GenerallyPositive.Browser
 
         /// <summary>
         /// Value to get/set (used when Action = "get" or "set").
-        /// NOTE: context sensitive (json) data
-        /// NOTE: Data can vary by impelementation as exposed by the respective API
+        /// Holds JSON whose shape depends on the action and on the API that serves it.
         /// </summary>
         public string Data 
         { 
@@ -339,7 +337,7 @@ namespace GenerallyPositive.Browser
         /// If set to true, return domain, path, storename (if applicable) and key to locate the returned value
         /// Otherwise, just return a list of string values
         /// </summary>
-        public bool IncludeProvenance { get; internal set; }    // not currently used (correctly)
+        public bool IncludeProvenance { get; internal set; }    // copied between actions; no storage call reads it
 
         /// <summary>
         ///  User defined data strictly used for filtering in GPAL, can store any data of value
@@ -347,7 +345,7 @@ namespace GenerallyPositive.Browser
         public string UserDefined { get; internal set; }
 
         /// <summary>
-        /// OttoMagic Only: For delete operations without a domain, limit to origin?
+        /// OttoMagic Only: For delete operations without a domain, whether the delete reaches past the current origin.
         /// true = delete across origins
         /// false = delete only in the current origin (default)
         /// </summary>

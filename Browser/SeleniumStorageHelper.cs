@@ -42,9 +42,9 @@ namespace GenerallyPositive.Browser
             this.browser = browser;
         }
 
-        // ──────────────────────────────────────────────────────────────
-        // Main public API – unchanged signature
-        // ──────────────────────────────────────────────────────────────
+        // --------------------------------------------------------------
+        // Main public API
+        // --------------------------------------------------------------
 
         public string GetStorage(StorageAction action)
         {
@@ -127,9 +127,9 @@ namespace GenerallyPositive.Browser
         {
             return string.Empty;
         }
-        // ──────────────────────────────────────────────────────────────
-        // IndexedDB – complete wildcard handling
-        // ──────────────────────────────────────────────────────────────
+        // --------------------------------------------------------------
+        // IndexedDB, with wildcard handling
+        // --------------------------------------------------------------
 
         private string GetIndexedDb(StorageAction action) => GetIndexedDbSelenium(action);
 
@@ -227,8 +227,8 @@ namespace GenerallyPositive.Browser
             var parameters = new Dictionary<string, object>
             {
                 { "expression", expression },
-                { "awaitPromise", true },     // ← This is critical for async/await
-                { "returnByValue", true }     // ← Returns plain value instead of RemoteObject
+                { "awaitPromise", true },     // waits for the async script's promise
+                { "returnByValue", true }     // returns a plain value instead of a RemoteObject
             };
 
             try
@@ -237,7 +237,6 @@ namespace GenerallyPositive.Browser
 
                 string retVal = ExtractResultValue(cdpResult);
 
-                // Optional: nice debug output
                 if (retVal?.Contains("\"error\":true") == true)
                     GPAL.PublishSimpleEvent(GPALEventType.ERROR, $"IndexedDB operation failed [{retVal}]", cdpResult, GPALObjectType.Other);
 
@@ -572,8 +571,8 @@ namespace GenerallyPositive.Browser
             var parms = new Dictionary<string, object>
             {
                 { "expression", js },
-                { "awaitPromise", true },     // ← This is critical for async/await
-                { "returnByValue", true }     // ← Returns plain value instead of RemoteObject
+                { "awaitPromise", true },     // waits for the async script's promise
+                { "returnByValue", true }     // returns a plain value instead of a RemoteObject
             };
 
             dynamic result = BrowserHelper.ExecuteCdp(browserDriver, "Runtime.evaluate", parms);
@@ -679,12 +678,11 @@ namespace GenerallyPositive.Browser
         ";
         }
 
-        // ──────────────────────────────────────────────────────────────
-        // Cookies / Local-Session – your existing impl is already solid
-        // (can keep as-is or apply similar error patterns if desired)
-        // ──────────────────────────────────────────────────────────────
+        // --------------------------------------------------------------
+        // Cookies and local/session storage
+        // --------------------------------------------------------------
 
-        // ──────────────────────────────────────────────────────────────
+        // --------------------------------------------------------------
         // COOKIES
         private string GetCookies(StorageAction action)
         {
@@ -825,7 +823,7 @@ namespace GenerallyPositive.Browser
                 string domain = (string)c["domain"];
                 string path = (string)c["path"];
 
-                // 2. Apply your existing filters
+                // 2. Filter by key, domain and path
                 if (!isAllKey && name != action.Key) continue;
                 if (!UrlHelper.CookieDomainMatches(domain, action.Domain)) continue;
                 if (!string.IsNullOrEmpty(action.Path) && path != action.Path) continue;
@@ -849,7 +847,7 @@ namespace GenerallyPositive.Browser
                     delParams.Add("partitionKey", pk);
                 }
 
-                // 5. Execute the surgical delete
+                // 5. Delete the cookie
                 BrowserHelper.ExecuteCdp(browserDriver, "Network.deleteCookies", delParams);
                 deletedCdp++;
             }
@@ -904,7 +902,7 @@ namespace GenerallyPositive.Browser
                 // Build CSV string
                 string emptyCsv = string.Join(",", emptyFields);
 
-                // Optional: check if any are empty
+                // Refuse when any is empty
                 if (0 < emptyFields.Count)
                 {
                     GPAL.PublishSimpleEvent(GPALEventType.ERROR, $"[{emptyCsv}] cannot be empty. Unable to set [{action.StorageType}]", action, GPALObjectType.Other);
@@ -913,7 +911,7 @@ namespace GenerallyPositive.Browser
 
                 IWebDriver driver = browserDriver;
 
-                // 1️⃣ Get cookies scoped to current page using Storage.getCookies
+                // 1. Get cookies scoped to current page using Storage.getCookies
                 var getParams = new Dictionary<string, object>
                 {
                     ["urls"] = new[] { driver.Url }
@@ -944,7 +942,7 @@ namespace GenerallyPositive.Browser
                     }
                 }
 
-                // 2️⃣ Build merged cookie
+                // 2. Build merged cookie
                 var cookie = new Dictionary<string, object>();
 
                 cookie["name"] = name;
@@ -970,14 +968,14 @@ namespace GenerallyPositive.Browser
                 cookie["httpOnly"] = existing?["httpOnly"] ?? true;
                 cookie["sameSite"] = existing?["sameSite"]?.ToString() ?? "None";
 
-                // Optional extras
+                // Priority, Medium unless the cookie has one
                 cookie["priority"] = existing?["priority"]?.ToString() ?? "Medium";
 
                 // Only include if present
                 if (existing?["partitionKey"] != null)
                     cookie["partitionKey"] = existing["partitionKey"];
 
-                // 3️⃣ Set cookie via Network.setCookie
+                // 3. Set cookie via Network.setCookie
                 BrowserHelper.ExecuteCdp(driver, "Network.setCookie", cookie);
 
                 return true;
@@ -992,7 +990,7 @@ namespace GenerallyPositive.Browser
             }
         }
 
-        // ──────────────────────────────────────────────────────────────
+        // --------------------------------------------------------------
         // LOCAL / SESSION STORAGE
         private string GetLocalOrSessionStorage(StorageAction action)
         {
@@ -1041,7 +1039,7 @@ namespace GenerallyPositive.Browser
             return webDriver.ExecuteJavaScript<bool>(script);
         }
 
-        // ──────────────────────────────────────────────────────────────
+        // --------------------------------------------------------------
         // CACHE STORAGE
         private string GetCache(StorageAction action)
         {
@@ -1049,7 +1047,7 @@ namespace GenerallyPositive.Browser
 
             if (string.IsNullOrEmpty(action.StoreName) && string.IsNullOrEmpty(action.Key))
             {
-                // Case 1: No path, no key > Return array of cache names only (matches original JS extension)
+                // Case 1: No path, no key > Return array of cache names only
                 expression = @"(async () => {
                                 const cacheNames = await caches.keys();
                                 return JSON.stringify(cacheNames);
@@ -1067,7 +1065,7 @@ namespace GenerallyPositive.Browser
             }
             else
             {
-                // Case 3: Path + Key > Return { url, body } or null (matches original JS)
+                // Case 3: Path + Key > Return { url, body } or null
                 expression = $@"(async () => {{
                                 const cache = await caches.open('{EscapeJs(action.StoreName)}');
                                 const response = await cache.match('{EscapeJs(action.Key)}');
@@ -1113,7 +1111,6 @@ namespace GenerallyPositive.Browser
             }
             catch (Exception ex)
             {
-                // Log or handle as needed
                 GPAL.PublishSimpleEvent(GPALEventType.EXCEPTION, $"Cache access failed", action, GPALObjectType.Other, ex);
                 action.Data = null;
                 return null;
@@ -1140,7 +1137,7 @@ namespace GenerallyPositive.Browser
                 }
             }
 
-            // Fallback for some edge cases
+            // A reply with the value at the top level
             if (cdpResult.TryGetValue("value", out var directValue))
             {
                 return directValue?.ToString();
@@ -1187,9 +1184,9 @@ namespace GenerallyPositive.Browser
             return int.TryParse(raw, out int deleted) ? deleted : 0;
         }
 
-        // ──────────────────────────────────────────────────────────────
+        // --------------------------------------------------------------
         // Helpers
-        // ──────────────────────────────────────────────────────────────
+        // --------------------------------------------------------------
 
         private string ExecuteFirefoxAsyncScript(string asyncIife)
         {

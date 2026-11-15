@@ -331,7 +331,7 @@ namespace GenerallyPositive.Browser
             }
             fullVersion = version;
 
-            return string.Join(".", version.Split('.').Take(3));    // NOTEL CAVEAT: 144.0.7559.96 - we are taking 3 but that doesn't always work, but anything less and we will update every time
+            return string.Join(".", version.Split('.').Take(3));    // first three parts (144.0.7559 of 144.0.7559.96); callers read fullVersion
         }
         internal static string GetEdgeVersion(out string fullVersion)
         {

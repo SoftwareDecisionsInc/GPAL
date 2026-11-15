@@ -70,7 +70,7 @@ namespace GenerallyPositive
         { 0xBD, ("-", "Minus") }, // VK_OEM_MINUS
         { 0xBE, (".", "Period") }, // VK_OEM_PERIOD
         { 0xBF, ("/", "Slash") }, // VK_OEM_2
-        { 0xC0, ("`", "Backquote") }, // VK_OEM_妹
+        { 0xC0, ("`", "Backquote") }, // VK_OEM_3
         { 0xDB, ("[", "BracketLeft") }, // VK_OEM_4
         { 0xDC, ("\\", "Backslash") }, // VK_OEM_5
         { 0xDD, ("]", "BracketRight") }, // VK_OEM_6

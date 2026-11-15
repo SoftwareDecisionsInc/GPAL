@@ -486,8 +486,10 @@ namespace GenerallyPositive
                                 GPAL.PublishSimpleEvent(GPALEventType.ERROR, "Failed to tokenize file.", this, GPALObjectType.GPALAI);
                                 continue;
                             }
-                            foreach (var row in ((IGPALFileInternal)file).TokenList)
-                                inputs.Add(string.Join(" ", row));
+                            // one grid per file, each row of each grid an input
+                            foreach (IGPALGrid<string> grid in ((IGPALFileInternal)file).TokenList)
+                                foreach (List<string> row in grid)
+                                    inputs.Add(string.Join(" ", row));
                             break;
                         case GPALDatabase database:
                             DatabaseHelper.TokenizeDatabase(null, database);
@@ -519,7 +521,7 @@ namespace GenerallyPositive
             {
                 using (var client = new HttpClient())
                 {
-                    client.DefaultRequestHeaders.Add("User-Agent", BrowserHelper.GetUserAgent(GPAL.Browsers[0]));   // NOTE: hardcoded value
+                    client.DefaultRequestHeaders.Add("User-Agent", BrowserHelper.GetUserAgent(GPAL.Browsers[0]));
 
                     string content = client.GetStringAsync(uri).GetAwaiter().GetResult();
                     GPAL.PublishSimpleEvent(GPALEventType.INFO, $"Fetched web content from [{uri}]", this, GPALObjectType.GPALAI);

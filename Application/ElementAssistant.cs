@@ -247,7 +247,12 @@ namespace GenerallyPositive.Application
         /// <returns>Fluent interface to write your element handling workflow</returns>
         public IAllowElementSettingsAndActions SendKeyCode(byte keyCode)
         {
-            HardwareHelper.SendKey(keyCode);
+            // the real keyboard reaches only the desktop on screen
+            if (false == ElementHelper.HardwareReaches(Application))
+                GPAL.PublishSimpleEvent(GPALEventType.WARNING, $"Key [{keyCode}] cannot be sent on a hidden desktop, since it is the real keyboard. Peek at the desktop to send it.", Application, GPALObjectType.Application);
+            else
+                HardwareHelper.SendKey(keyCode);
+
             return this;
         }
         /// <summary>
@@ -257,7 +262,10 @@ namespace GenerallyPositive.Application
         /// <returns>Fluent interface to write your element handling workflow</returns>
         public IAllowElementSettingsAndActions PressModifierKey(ModifierKeys modifierKeys)
         {
-            if (ModifierKeys.NONE != modifierKeys)
+            // the real keyboard reaches only the desktop on screen
+            if (ModifierKeys.NONE != modifierKeys && false == ElementHelper.HardwareReaches(Application))
+                GPAL.PublishSimpleEvent(GPALEventType.WARNING, $"[{Browser.Browser.GetModifierKeys(modifierKeys)}] cannot be pressed on a hidden desktop, since it is the real keyboard. Peek at the desktop to use it.", Application, GPALObjectType.Application);
+            else if (ModifierKeys.NONE != modifierKeys)
                 HardwareHelper.PressModifierKey(modifierKeys);
             return this;
         }
@@ -268,7 +276,8 @@ namespace GenerallyPositive.Application
         /// <returns>Fluent interface to write your element handling workflow</returns>
         public IAllowElementSettingsAndActions ReleaseModifierKey(ModifierKeys modifierKeys)
         {
-            if (ModifierKeys.NONE != modifierKeys)
+            // nothing was pressed on a hidden desktop, so there is nothing to release
+            if (ModifierKeys.NONE != modifierKeys && true == ElementHelper.HardwareReaches(Application))
                 HardwareHelper.ReleaseModifierKeys(modifierKeys);
             return this;
         }
