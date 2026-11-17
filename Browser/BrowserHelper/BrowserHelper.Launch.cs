@@ -221,6 +221,9 @@ namespace GenerallyPositive.Browser
                         {
                             // Set headless mode
                             options.AddArgument("--headless=new");
+                            // headless Chromium's screen is 800x600, so maximized and full screen windows are that
+                            // small; the primary screen's size gives them the size they have on the desktop
+                            options.AddArgument($"--screen-info={{{System.Windows.Forms.Screen.PrimaryScreen.Bounds.Width}x{System.Windows.Forms.Screen.PrimaryScreen.Bounds.Height}}}");
                             // Disable GPU
                             //options.AddArgument("--disable-gpu");
                             // Disable software rasterizer

@@ -8,6 +8,23 @@ Changes that would break a working program wait for 2.0. Everything below still 
 
 - Close(bool) is removed; call Close()
 - BrowserHelper.KillAllRunningProcesses(bool, IBrowser) is removed; call KillAllRunningProcesses(IBrowser)
+- WithServiceAccountKey(GoogleServiceAccountKey) is removed and GoogleServiceAccountKey is internal; pass the key file
+
+## 1.1.1
+
+### GPAL
+
+#### Fixed
+
+- FullScreen works on the Puppeteer engines
+- Headless Chrome and Edge maximize and go full screen at the screen's size, not 800x600
+- WithWindowSize resizes a browser that is already open
+- Restore brings a full screen window back
+- A Google service account key file is read correctly
+
+#### Deprecated
+
+- WithServiceAccountKey(GoogleServiceAccountKey); pass the key file or its JSON
 
 ## 1.1.0
 

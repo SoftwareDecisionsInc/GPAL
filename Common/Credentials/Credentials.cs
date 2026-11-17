@@ -503,6 +503,7 @@ namespace GenerallyPositive
         /// </summary>
         /// <param name="serviceAccountKey">Service account key object, normally loaded from a JSON key file.</param>
         /// <returns>Fluent interface to continue building the credentials request</returns>
+        [Obsolete("GoogleServiceAccountKey becomes internal in 2.0; call WithServiceAccountKey with the key file or its JSON instead.")]
         public IAllowCredentialSettings WithServiceAccountKey(GoogleServiceAccountKey serviceAccountKey)
         {
             if (serviceAccountKey == null)

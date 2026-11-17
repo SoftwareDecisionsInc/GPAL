@@ -378,6 +378,9 @@ namespace GenerallyPositive.Browser
                 if (headless)
                 {
                     chromeArguments.Add("--headless=new");
+                    // headless Chromium's screen is 800x600, so maximized and full screen windows are that small; the
+                    // primary screen's size gives them the size they have on the desktop
+                    chromeArguments.Add($"--screen-info={{{System.Windows.Forms.Screen.PrimaryScreen.Bounds.Width}x{System.Windows.Forms.Screen.PrimaryScreen.Bounds.Height}}}");
                     chromeArguments.Add("--disable-notifications");
                     chromeArguments.Add("--disable-gpu");
                     if (AutomationEngine.PuppeteerPipe == browserSettings.AutomationEngine || AutomationEngine.PuppeteerPipeHW == browserSettings.AutomationEngine)

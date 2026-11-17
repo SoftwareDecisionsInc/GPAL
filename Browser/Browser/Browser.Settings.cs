@@ -886,7 +886,7 @@ namespace GenerallyPositive.Browser
             return this;
         }
         /// <summary>
-        /// Set the default window size for when the browser opens.
+        /// Set the window size and position. A browser not yet open opens at this size; an open one is resized now.
         /// As well, exiting fullscreen will return to this size.
         /// IF NOT SET: 'Normal' to restore the window will restore the window to the Size before enterinng fullscreen
         /// </summary>
@@ -899,8 +899,8 @@ namespace GenerallyPositive.Browser
 
             if (100 > windowSize.Width || 100 > windowSize.Height)
             {
-                int widthToUse = Math.Min(windowSize.Width, 100);
-                int heightToUse = Math.Min(windowSize.Height, 100);
+                int widthToUse = Math.Max(windowSize.Width, 100);
+                int heightToUse = Math.Max(windowSize.Height, 100);
 
                 GPAL.PublishSimpleEvent(GPALEventType.WARNING, $"Requested browser sizes [{windowSize.Width}x{windowSize.Height}] cannot be less than 100. Using [{widthToUse}x{heightToUse}].", this, GPALObjectType.Browser);
 
@@ -920,6 +920,40 @@ namespace GenerallyPositive.Browser
             }
 
             BrowserSettings.WindowSize = windowSize;
+
+            // An open browser is resized now. Chromium will not resize a maximized or full screen window, so the window
+            // goes back to normal first
+            if (null != BrowserSettings.Process || 0 != BrowserSettings.ServiceDriverPid)
+            {
+                BrowserSettings.FullScreen = false;
+                BrowserSettings.Maximize = false;
+                BrowserSettings.Minimize = false;
+
+                if (true == BrowserSettings.UseOttoMagic)
+                {
+                    MagicHelper.Normal();
+
+                    // Process.MainWindowHandle sees only this process's desktop and is cached, so a hidden desktop's
+                    // window is found on that desktop, and the visible one is read fresh
+                    if (true == BrowserSettings.HiddenDesktop)
+                        WindowHelper.ResizeWindow(Desktops.MainWindowOf(BrowserSettings.HiddenDesktopName, BrowserSettings.Process.Id), windowSize);
+                    else
+                    {
+                        BrowserSettings.Process.Refresh();
+                        WindowHelper.ResizeWindow(BrowserSettings.Process, windowSize);
+                    }
+                }
+                else if (true == BrowserSettings.UsePuppeteer)
+                {
+                    PuppeteerClient.Normal().Execute();
+                    PuppeteerCommunicator.SetWindowSize(windowSize).GetAwaiter().GetResult();
+                }
+                else if (null != BrowserSettings.BrowserDriver)
+                {
+                    BrowserSettings.BrowserDriver.Manage().Window.Size = windowSize.Size;
+                    BrowserSettings.BrowserDriver.Manage().Window.Position = windowSize.Location;
+                }
+            }
 
             return this;
         }

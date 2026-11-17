@@ -483,6 +483,7 @@ namespace GenerallyPositive
         [Settings(Description = "Supplies a Google Cloud service account key as a raw JSON string, used to fetch an access token without an interactive OAuth flow")]
         IAllowCredentialSettings WithServiceAccountKey(string serviceAccountKey);
         [Settings(Description = "Supplies a Google Cloud service account key as a deserialized object, used to fetch an access token without an interactive OAuth flow")]
+        [Obsolete("GoogleServiceAccountKey becomes internal in 2.0; call WithServiceAccountKey with the key file or its JSON instead.")]
         IAllowCredentialSettings WithServiceAccountKey(GoogleServiceAccountKey serviceAccountKey);
     }
     public interface IAllowClientSecret

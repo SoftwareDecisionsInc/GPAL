@@ -50,6 +50,9 @@ namespace GenerallyPositive.Browser
         {
             get
             {
+                // read before it is cleared; a full screen window comes back through Normal
+                bool wasFullScreen = BrowserSettings.FullScreen;
+
                 BrowserSettings.FullScreen = false;
                 BrowserSettings.Maximize = false;
                 BrowserSettings.Minimize = false;
@@ -59,14 +62,14 @@ namespace GenerallyPositive.Browser
                 if (null != BrowserSettings.Process || 0 != BrowserSettings.ServiceDriverPid)
                     if (true == BrowserSettings.UseOttoMagic)
                     {
-                        if (true == BrowserSettings.FullScreen)
+                        if (true == wasFullScreen)
                             MagicHelper.Normal();
                         else
                             MagicHelper.Restore();
                     }
                     else if (true == BrowserSettings.UsePuppeteer)
                     {
-                        if (true == BrowserSettings.FullScreen)
+                        if (true == wasFullScreen)
                             PuppeteerClient.Normal().Execute();
                         else
                             PuppeteerClient.Restore().Execute();
@@ -100,7 +103,7 @@ namespace GenerallyPositive.Browser
                     else if (true == BrowserSettings.UsePuppeteer)
                     {
                         BrowserSettings.SavedWindowSize = new Size(PuppeteerClient.WindowOuterWidth().Execute<int>(), PuppeteerClient.WindowOuterHeight().Execute<int>());
-                        MagicHelper.FullScreen();
+                        PuppeteerClient.FullScreen().Execute();
                     }
                     else if (null != BrowserSettings.BrowserDriver)
                     {
