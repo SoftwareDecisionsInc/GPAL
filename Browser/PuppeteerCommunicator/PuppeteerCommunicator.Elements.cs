@@ -111,12 +111,16 @@ namespace GenerallyPositive.Browser
 
             CurrentFrameId = frameId;
 
-            // drop any session left over from a previously resolved iframe - the attach below is allowed to fail
-            // silently for same-origin frames, and without this a stale cross-origin session would be reused
+            // drop any session left over from a previously resolved iframe; a frame that is not a target of its own
+            // gets no session below
             CurrentFrameSessionId = null;
 
-            // Try to attach to frame target (works for cross-origin OOPIFs)
-            try
+            // only an out-of-process frame is a target of its own; any other frame is reached through the page session
+            var targets = await SendCommand<object>(DevToolsMethods.TargetGetTargets, new { }, null).ConfigureAwait(false);
+            bool frameIsTarget = null != targets?.targetInfos
+                && ((IEnumerable<dynamic>)targets.targetInfos).Any(t => frameId == (string)t.targetId);
+
+            if (true == frameIsTarget)
             {
                 var attach = await SendCommand<dynamic>(DevToolsMethods.TargetAttachToTarget, new
                 {
@@ -127,10 +131,6 @@ namespace GenerallyPositive.Browser
                 string frameSessionId = attach?.sessionId?.ToString();
                 if (!string.IsNullOrEmpty(frameSessionId))
                     CurrentFrameSessionId = frameSessionId;
-            }
-            catch
-            {
-                // Normal for same-origin iframes - ignore
             }
 
             // Always create isolated world (works for both same-origin and cross-origin)

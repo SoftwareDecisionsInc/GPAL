@@ -192,17 +192,14 @@ namespace GenerallyPositive.Browser
                 if ("GPALElement".Equals(element.TagName))
                     return true;     // it's already in view if it's a matched image
 
-                // force layout engine to run before we interact
+                // reading offsetHeight forces a layout in headless without firing any event the page listens to
                 if (true == Browser.BrowserSettings.UseHeadless)
                 {
-                    // force layout
                     await SendCommand<object>(DevToolsMethods.RuntimeEvaluate,
                         new {
                             contextId = CurrentContextId,
-                            expression = @"
-                                document.body.style.zoom = '100%';  // minor reflow trigger
-                                window.dispatchEvent(new Event('resize'));
-                                document.documentElement.scrollTop += 1; document.documentElement.scrollTop -= 1;" 
+                            expression = "document.body.offsetHeight;",
+                            returnByValue = true
                         }, sessionId).ConfigureAwait(false);
                 }
 

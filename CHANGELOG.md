@@ -10,6 +10,19 @@ Changes that would break a working program wait for 2.0. Everything below still 
 - BrowserHelper.KillAllRunningProcesses(bool, IBrowser) is removed; call KillAllRunningProcesses(IBrowser)
 - WithServiceAccountKey(GoogleServiceAccountKey) is removed and GoogleServiceAccountKey is internal; pass the key file
 
+## 1.1.3
+
+### GPAL
+
+#### Changed
+
+- InFrame and InShadowDom wait for their frame or shadow host as long as an action waits for its selector
+
+#### Fixed
+
+- A headless Puppeteer click on an item in an open menu clicks it; the menu no longer closes first
+- Entering a same-origin iframe on Puppeteer no longer logs a CDP error
+
 ## 1.1.2
 
 ### GPAL

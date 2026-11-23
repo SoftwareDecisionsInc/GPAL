@@ -534,6 +534,10 @@ namespace GenerallyPositive.Browser
                     }
                 }
             
+                // the frame is waited for as an action waits for its selector
+                if (WaitTime.Never < CurrentUOW.WaitForInMs)
+                    ElementHelper.WaitFor(this, selector, CurrentUOW.WaitForInMs, out _, out _, CurrentUOW.ShadowRoot);
+
                 // Find the iframe
                 ElementHelper.FindWebElements(
                     this, CurrentUOW, selector, out _, out var tempElems, CurrentUOW.ShadowRoot);
@@ -652,6 +656,10 @@ namespace GenerallyPositive.Browser
                         inElement = contextType.gPalElement;
                     }
                 }
+
+                // the host is waited for as an action waits for its selector
+                if (WaitTime.Never < CurrentUOW.WaitForInMs)
+                    ElementHelper.WaitFor(this, shadowDomSelector, CurrentUOW.WaitForInMs, out _, out _, inElement);
 
                 ElementHelper.FindWebElements(
                     this, CurrentUOW, shadowDomSelector, out _, out var tempElems, inElement);

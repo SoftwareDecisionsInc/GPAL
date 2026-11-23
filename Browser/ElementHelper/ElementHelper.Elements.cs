@@ -1564,7 +1564,7 @@ namespace GenerallyPositive.Browser
         /// <param name="matchedElements">Receives the elements that matched the selector's criteria</param>
         /// <param name="webElement">Optional element to scope/retry the search against</param>
         /// <returns>All elements found for the selector (before match-criteria filtering)</returns>
-        private static List<GPALElement> WaitFor(Browser browser, Selector selector, int timeoutInTicks, out bool matchedAll, out List<GPALElement> matchedElements, GPALElement webElement = null)
+        internal static List<GPALElement> WaitFor(Browser browser, Selector selector, int timeoutInTicks, out bool matchedAll, out List<GPALElement> matchedElements, GPALElement webElement = null)
         {
             bool matchedAll2 = true;
             List<GPALElement> matchedElements2;
