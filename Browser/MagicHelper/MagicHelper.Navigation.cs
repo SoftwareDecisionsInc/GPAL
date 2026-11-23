@@ -140,7 +140,6 @@ namespace GenerallyPositive.Browser
             if (lastSessionToken != sessionToken)
             {
                 lastErrorMessage.Clear();
-                supressedMessage = false;
                 lastSessionToken = sessionToken;
             }
 
@@ -153,18 +152,13 @@ namespace GenerallyPositive.Browser
             else
                 retVal = "complete";
 
+            // each status read once, as DEBUG; CheckDocumentReady publishes the result of the wait
             string currentErrorMessage = $"Document.Ready status [{retVal}]";
 
             if (false == lastErrorMessage.Contains(currentErrorMessage))
             {
                 lastErrorMessage.Add(currentErrorMessage);
-                GPAL.PublishSimpleEvent(GPALEventType.INFO, currentErrorMessage, null, GPALObjectType.None);
-                supressedMessage = false;
-            }
-            else if (false == supressedMessage)
-            {
-                GPAL.PublishSimpleEvent(GPALEventType.INFO, "Supressing repeat messages", currentErrorMessage, GPALObjectType.Other);
-                supressedMessage = true;
+                GPAL.PublishSimpleEvent(GPALEventType.DEBUG, currentErrorMessage, null, GPALObjectType.None);
             }
 
             return retVal;

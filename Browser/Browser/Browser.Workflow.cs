@@ -243,7 +243,7 @@ namespace GenerallyPositive.Browser
                 return this;
             }
             else
-                GPAL.PublishSimpleEvent(GPALEventType.INFO, "Workflow starting, you should be careful if you follow this with actions. CallIf handlers will be invoked again.", this, GPALObjectType.Browser);
+                GPAL.PublishSimpleEvent(GPALEventType.INFO, "Workflow started", this, GPALObjectType.Browser);
 
             if (true == WorkflowSetup(WaitTime.Never < CurrentUOW.WaitForInMs, true))
                 for (int pages = 0; pages < CurrentUOW.PageCount; pages++)  // StartWorkflow runs the CallIf and CallAfter handlers with no main workflow
@@ -394,16 +394,42 @@ namespace GenerallyPositive.Browser
             if (null != ClosedAt)
                 throw new GPALException($"This browser was closed at [{ClosedAt:HH:mm:ss}] and a closed browser is done. Create a new one with GPAL.Browser.");
 
-            // A Selenium driver or browser that has exited answers nothing, and every command after it waits out its
-            // timeout. That is GPAL's own infrastructure gone, so the browser is closed, freeing its profile, and the
-            // workflow ends, as on Puppeteer.
-            string exited = true == UseSelenium && false == inClose && null != BrowserDriver ? SeleniumProcessExited() : null;
+            // A Selenium driver or browser that has exited, a lost session, or no window left answers nothing, and every
+            // command after it waits out its timeout. That is GPAL's own infrastructure gone, so the browser is closed,
+            // freeing its profile, and the workflow ends, as on Puppeteer.
+            string gone = null;
+            Exception sessionError = null;
 
-            if (null != exited)
+            if (true == UseSelenium && false == inClose && null != BrowserDriver)
             {
-                string msg = $"The [{exited}] process has exited, so there is nothing left to send a command to";
+                string exited = SeleniumProcessExited();
 
-                GPAL.PublishSimpleEvent(GPALEventType.ERROR, msg, this, GPALObjectType.Browser);
+                if (null != exited)
+                    gone = $"The [{exited}] process has exited";
+                else
+                {
+                    // listing the windows touches no page or element, so a failure here is the session itself
+                    try
+                    {
+                        if (0 == BrowserDriver.WindowHandles.Count(h => h != GhostTabHandle))
+                            gone = "Every browser window was closed";
+                    }
+                    catch (Exception ex)
+                    {
+                        gone = "The Selenium session is gone";
+                        sessionError = ex;
+                    }
+                }
+            }
+
+            if (null != gone)
+            {
+                string msg = $"{gone}, so there is nothing left to send a command to";
+
+                if (null == sessionError)
+                    GPAL.PublishSimpleEvent(GPALEventType.ERROR, msg, this, GPALObjectType.Browser);
+                else
+                    GPAL.PublishSimpleEvent(GPALEventType.EXCEPTION, msg, this, GPALObjectType.Browser, sessionError);
 
                 Close();
 

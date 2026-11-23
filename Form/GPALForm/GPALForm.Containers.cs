@@ -414,13 +414,14 @@ namespace GenerallyPositive.GPALForm
             // one; stacked panes are both plus the bar. .WithHeight overrides this.
             if (10 >= gPALSplitter.Height)
             {
-                // A pane's PreferredSize returns its current height; add up its controls' heights instead.
+                // A pane's PreferredSize returns its current height; add up its controls' heights instead. Each row
+                // is its control's height plus its top and bottom margins, so all three are counted.
                 Func<TableLayoutPanel, int> contentHeight = pane =>
                 {
                     int total = pane.Padding.Top + pane.Padding.Bottom;
 
                     foreach (Control child in pane.Controls)
-                        total += child.Height + child.Margin.Bottom;
+                        total += child.Margin.Top + child.Height + child.Margin.Bottom;
 
                     return total;
                 };

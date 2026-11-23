@@ -56,7 +56,6 @@ namespace GenerallyPositive.Browser
         static bool alreadyUpdating = false;
 
         static List<string> lastErrorMessage = new List<string>();
-        static bool supressedMessage = false;
         static string lastSessionToken;
 
         /// <summary>

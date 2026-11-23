@@ -1,6 +1,6 @@
 # Changelog
 
-Every release of GPAL and GPAL.Image, newest first. The two are released together at the same version.
+Every release of GPAL and GPAL.Image, newest first. GPAL.Image is released only when its own code changes.
 
 ## 2.0 (planned)
 
@@ -9,6 +9,23 @@ Changes that would break a working program wait for 2.0. Everything below still 
 - Close(bool) is removed; call Close()
 - BrowserHelper.KillAllRunningProcesses(bool, IBrowser) is removed; call KillAllRunningProcesses(IBrowser)
 - WithServiceAccountKey(GoogleServiceAccountKey) is removed and GoogleServiceAccountKey is internal; pass the key file
+
+## 1.1.2
+
+### GPAL
+
+#### Changed
+
+- A selector search logs one line with what it found and matched; after a WaitFor, with how long the wait took
+- A wait on document.ready logs one line with the status and time, and a warning when the wait runs out
+- StartWorkflow logs "Workflow started"
+
+#### Fixed
+
+- The GPAL version and start time are logged when a program turns on console output with WithPublishToConsole
+- A splitter is tall enough for every control in its panes; the last one was cut off
+- InMainDom, InFrame and InShadowDom publish a failed switch instead of throwing it; a browser that is gone still ends the workflow
+- A Selenium browser whose session is lost, or whose windows are all closed, ends the workflow at the next action
 
 ## 1.1.1
 

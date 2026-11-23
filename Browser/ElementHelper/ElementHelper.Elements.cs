@@ -60,7 +60,8 @@ namespace GenerallyPositive.Browser
             out List<GPALElement> matchedElements,
             GPALElement webElement = null,
             bool callIfHandler = true,
-            bool isPersistent = false)
+            bool isPersistent = false,
+            bool publish = true)
         {
             int retries = 1;
             bool retry = false;
@@ -75,11 +76,11 @@ namespace GenerallyPositive.Browser
             string message = string.Empty;
 
             currentUOW.CurrentSelector = selector;
+            lastFoundFullMessage = null;
 
             if (false == lastSelector?.Name.Equals(selector.Name))
             {
                 listOfMessages.Clear();
-                supressedMessage = false;
                 lastSelector = selector;
             }
             else if (null == lastSelector)
@@ -114,14 +115,6 @@ namespace GenerallyPositive.Browser
 
                 try
                 {
-                    message = $"Searching for elements for selector [{selector.Name}] using [{selectorPathEntry.SelectorPathType}] [{abbreviatedText}]";
-
-                    if (false == listOfMessages.Contains(message))
-                    {
-                        listOfMessages.Add(message);
-                        GPAL.PublishSimpleEvent(GPALEventType.INFO, message, browser, GPALObjectType.Browser);
-                    }
-
                     var tmpAllFoundElems = FindElements(browser, currentUOW, selectorPathEntry, selector, webElement, idx, functionList, isPersistent);
 
                     // Some finders return null for nothing found, such as an unmatched image or an OttoMagic XPath with
@@ -223,25 +216,29 @@ namespace GenerallyPositive.Browser
 
                 selector.ElementsFoundAndMatchedCount = (int)(null != matchedElements ? matchedElements?.Count() : 0);
 
-                message = $"[{retElems?.Count ?? 0}] elements found for selector [{selector.Name}]";
+                // one line for the search: what it found, what of that matched when there were criteria,
+                // and the selector path that was used
+                string matchedPart = string.Empty;
 
+                if (0 < retElems?.Count && (true == selector.AnyMatchCriteria() || Int32.MaxValue != withAllThatMatch))
+                {
+                    var matchCount = selector.MatchCriteria.Count > 0 ? selector.MatchCriteria.Count.ToString() : $"WithAllThatMatch({withAllThatMatch})";
+
+                    if ((true == matchCount.Contains("WithAllThatMatch") && 0 < withAllThatMatch) || 0 < selector.MatchCriteria.Count)
+                        matchedPart = $", [{matchedElements?.Count}] matched with [{matchCount}] match criteria";
+                }
+
+                message = $"[{retElems?.Count ?? 0}] elements found{matchedPart} for selector [{selector.Name}] using [{selectorPathEntry.SelectorPathType}] [{abbreviatedText}]";
+                lastFoundFullMessage = $"[{retElems?.Count ?? 0}] elements found{matchedPart} for selector [{selector.Name}] using [{selectorPathEntry.SelectorPathType}] [{selectorPathEntry.SelectorPath}]";
+
+                // A repeat of the same search is not published again. A WaitFor poll publishes nothing but still counts
+                // as seen, for every selector path it tried, so the action's own search after the wait repeats none of it
                 if (false == listOfMessages.Contains(message))
                 {
                     listOfMessages.Add(message);
-                    GPAL.PublishSimpleEvent(GPALEventType.INFO, message, browser, GPALObjectType.Browser);
 
-                    if (0 < retElems?.Count && (true == selector.AnyMatchCriteria() || Int32.MaxValue != withAllThatMatch))
-                    {
-                        var matchCount = selector.MatchCriteria.Count > 0 ? selector.MatchCriteria.Count.ToString() : $"WithAllThatMatch({withAllThatMatch})";
-
-                        if ((true == matchCount.Contains("WithAllThatMatch") && 0 < withAllThatMatch) || 0 < selector.MatchCriteria.Count)
-                            GPAL.PublishSimpleEvent(GPALEventType.INFO, $"[{matchedElements?.Count}] elements matched for selector [{selector.Name}] with [{matchCount}] match criteria", browser, GPALObjectType.Browser);
-                    }
-                }
-                else if (false == supressedMessage)
-                {
-                    GPAL.PublishSimpleEvent(GPALEventType.INFO, "Supressing repeat messages", browser, GPALObjectType.Browser);
-                    supressedMessage = true;
+                    if (true == publish)
+                        GPAL.PublishSimpleEvent(GPALEventType.INFO, message, browser, GPALObjectType.Browser);
                 }
 
                 if (matchedAll || retElems?.Count > 0)
@@ -1577,7 +1574,8 @@ namespace GenerallyPositive.Browser
             if (WaitTime.Forever == timeoutInTicks)
                 timeoutInTicks = Int32.MaxValue;    // forever
 
-            GPAL.PublishSimpleEvent(GPALEventType.INFO, $"Waiting up to [{timeoutInTicks}] ms for elements matching selector [{selector.Name}][{selector.SelectorPath}]", browser, GPALObjectType.Browser);
+            // the start of the wait, at DEBUG: INFO gets one line when the wait is over
+            GPAL.PublishSimpleEvent(GPALEventType.DEBUG, $"Waiting up to [{timeoutInTicks}] ms for elements matching selector [{selector.Name}][{selector.SelectorPath}]", browser, GPALObjectType.Browser);
 
             // waiting for Hidden needs no element to appear first
             bool waitForHidden = ElementState.Hidden == browser.CurrentUOW.WaitForElementState;
@@ -1585,8 +1583,9 @@ namespace GenerallyPositive.Browser
             var sw = Stopwatch.StartNew();
             do
             {
+                // the polls publish nothing; the wait publishes one line when it is over
                 elements = FindWebElements(browser, browser.CurrentUOW, selector,
-                    out matchedAll2, out matchedElements2, webElement, false);
+                    out matchedAll2, out matchedElements2, webElement, false, publish: false);
 
                 // sleep only while time remains, so the sleep time is never negative; a search that gives no list
                 // sleeps too, so the loop does not spin
@@ -1595,6 +1594,11 @@ namespace GenerallyPositive.Browser
 
             } while (sw.ElapsedMilliseconds < timeoutInTicks && false == waitForHidden &&
                      (matchedElements2 == null || matchedElements2.Count == 0));
+
+            // what the last search found, with its path in full, how long the wait took and what it allowed
+            string found = lastFoundFullMessage ?? $"[0] elements found for selector [{selector.Name}]";
+
+            GPAL.PublishSimpleEvent(GPALEventType.INFO, $"{found} in [{sw.ElapsedMilliseconds}] ms of {(Int32.MaxValue == timeoutInTicks ? "[forever]" : $"[{timeoutInTicks}] ms")}", browser, GPALObjectType.Browser);
 
             matchedAll = matchedAll2;
             matchedElements = matchedElements2;         // always use matched, it's either all or those matched

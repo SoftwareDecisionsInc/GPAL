@@ -491,58 +491,69 @@ namespace GenerallyPositive.Browser
             BrowserSettings.CurrentSelector = selector;
             CurrentUOW.InSelectorList.Add(selector);
 
-            if (true == UseOttoMagic)
-                MagicHelper.SwitchToDefaultContent();
-            else if (true == UsePuppeteer)
-                PuppeteerClient.SwitchToDefaultContent().Execute();
-            else
-                this.BrowserDriver.SwitchTo().DefaultContent();
-
-            IEnumerable<UnitOfWork.WebElementWithType> stepsToProcess;
-            GPALElement inElement = null;
-
-            stepsToProcess = CurrentUOW.ContextPath;
-
-            // Walk the context path from the document: frames, shadow roots and elements
-            foreach (UnitOfWork.WebElementWithType contextType in stepsToProcess)
+            try
             {
-                if (ElementType.IFrame == contextType.elementType)
-                {
-                    if (true == UseOttoMagic)
-                        MagicHelper.SwitchToElement(contextType.gPalElement.Css);
-                    else if(true == UsePuppeteer)
-                        PuppeteerClient.SwitchToFrame(contextType.gPalElement.Css).Execute();
-                    else
-                        BrowserDriver.SwitchTo().Frame((IWebElement)contextType.gPalElement.WebElement);
+                if (true == UseOttoMagic)
+                    MagicHelper.SwitchToDefaultContent();
+                else if (true == UsePuppeteer)
+                    PuppeteerClient.SwitchToDefaultContent().Execute();
+                else
+                    this.BrowserDriver.SwitchTo().DefaultContent();
 
-                    // a search context belongs to one document - anything scoped in the frame we just left is
-                    // stale, and a shadow root from the parent throws "no such shadow root" if reused here
-                    inElement = null;
+                IEnumerable<UnitOfWork.WebElementWithType> stepsToProcess;
+                GPALElement inElement = null;
+
+                stepsToProcess = CurrentUOW.ContextPath;
+
+                // Walk the context path from the document: frames, shadow roots and elements
+                foreach (UnitOfWork.WebElementWithType contextType in stepsToProcess)
+                {
+                    if (ElementType.IFrame == contextType.elementType)
+                    {
+                        if (true == UseOttoMagic)
+                            MagicHelper.SwitchToElement(contextType.gPalElement.Css);
+                        else if(true == UsePuppeteer)
+                            PuppeteerClient.SwitchToFrame(contextType.gPalElement.Css).Execute();
+                        else
+                            BrowserDriver.SwitchTo().Frame((IWebElement)contextType.gPalElement.WebElement);
+
+                        // a search context belongs to one document - anything scoped in the frame we just left is
+                        // stale, and a shadow root from the parent throws "no such shadow root" if reused here
+                        inElement = null;
+                    }
+                    else if (ElementType.ShadowRoot == contextType.elementType)
+                    {
+                        if (true == UseOttoMagic)
+                            MagicHelper.SwitchToShadowRoot(contextType.gPalElement.Css);
+                        else if (true == UsePuppeteer)
+                            PuppeteerClient.SwitchToShadowRoot(contextType.gPalElement.Css).Execute();
+
+                        // scope to this step's shadow root, so a path with more than one shadow root walks through
+                        // each in turn
+                        inElement = contextType.gPalElement;
+                    }
                 }
-                else if (ElementType.ShadowRoot == contextType.elementType)
-                {
-                    if (true == UseOttoMagic)
-                        MagicHelper.SwitchToShadowRoot(contextType.gPalElement.Css);
-                    else if (true == UsePuppeteer)
-                        PuppeteerClient.SwitchToShadowRoot(contextType.gPalElement.Css).Execute();
+            
+                // Find the iframe
+                ElementHelper.FindWebElements(
+                    this, CurrentUOW, selector, out _, out var tempElems, CurrentUOW.ShadowRoot);
 
-                    // scope to this step's shadow root, so a path with more than one shadow root walks through
-                    // each in turn
-                    inElement = contextType.gPalElement;
+                if (tempElems?.Count > 0)
+                {
+                    var iframeElement = new UnitOfWork.WebElementWithType(
+                        selector, tempElems[0], ElementType.IFrame);
+
+                    CurrentUOW.ContextPath ??= new List<UnitOfWork.WebElementWithType>();
+                    CurrentUOW.ContextPath.Add(iframeElement);
                 }
             }
-            
-            // Find the iframe
-            ElementHelper.FindWebElements(
-                this, CurrentUOW, selector, out _, out var tempElems, CurrentUOW.ShadowRoot);
-
-            if (tempElems?.Count > 0)
+            catch (GPALException)
             {
-                var iframeElement = new UnitOfWork.WebElementWithType(
-                    selector, tempElems[0], ElementType.IFrame);
-
-                CurrentUOW.ContextPath ??= new List<UnitOfWork.WebElementWithType>();
-                CurrentUOW.ContextPath.Add(iframeElement);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                GPAL.PublishSimpleEvent(GPALEventType.EXCEPTION, "Unable to enter the frame", this, GPALObjectType.Browser, ex);
             }
 
             return this;
@@ -602,94 +613,105 @@ namespace GenerallyPositive.Browser
             BrowserSettings.CurrentSelector = shadowDomSelector;
             CurrentUOW.InSelectorList.Add(shadowDomSelector);
 
-            if (true == UseOttoMagic)
-                MagicHelper.SwitchToDefaultContent();
-            else if (true == UsePuppeteer)
-                PuppeteerClient.SwitchToDefaultContent().Execute();
-            else
-                this.BrowserDriver.SwitchTo().DefaultContent();
-
-            GPALElement inElement = null;
-
-            // Walk the context path from the document: frames, shadow roots and elements
-            foreach (UnitOfWork.WebElementWithType contextType in CurrentUOW.ContextPath)
+            try
             {
-                if (ElementType.IFrame == contextType.elementType)
-                {
-                    if (true == UseOttoMagic)
-                        MagicHelper.InFrame(contextType.gPalElement.Css);
-                    else if (true == UsePuppeteer)
-                        PuppeteerClient.SwitchToFrame(contextType.gPalElement.Css).Execute();
-                    else
-                        BrowserDriver.SwitchTo().Frame((IWebElement)contextType.gPalElement.WebElement);
+                if (true == UseOttoMagic)
+                    MagicHelper.SwitchToDefaultContent();
+                else if (true == UsePuppeteer)
+                    PuppeteerClient.SwitchToDefaultContent().Execute();
+                else
+                    this.BrowserDriver.SwitchTo().DefaultContent();
 
-                    // a search context belongs to one document - anything scoped in the frame we just left is
-                    // stale, and a shadow root from the parent throws "no such shadow root" if reused here
-                    inElement = null;
+                GPALElement inElement = null;
+
+                // Walk the context path from the document: frames, shadow roots and elements
+                foreach (UnitOfWork.WebElementWithType contextType in CurrentUOW.ContextPath)
+                {
+                    if (ElementType.IFrame == contextType.elementType)
+                    {
+                        if (true == UseOttoMagic)
+                            MagicHelper.InFrame(contextType.gPalElement.Css);
+                        else if (true == UsePuppeteer)
+                            PuppeteerClient.SwitchToFrame(contextType.gPalElement.Css).Execute();
+                        else
+                            BrowserDriver.SwitchTo().Frame((IWebElement)contextType.gPalElement.WebElement);
+
+                        // a search context belongs to one document - anything scoped in the frame we just left is
+                        // stale, and a shadow root from the parent throws "no such shadow root" if reused here
+                        inElement = null;
+                    }
+                    else if (ElementType.ShadowRoot == contextType.elementType)
+                    {
+                        if (true == UseOttoMagic)
+                            MagicHelper.SwitchToShadowRoot(contextType.gPalElement.Css);
+                        else if (true == UsePuppeteer)
+                            PuppeteerClient.SwitchToShadowRoot(contextType.gPalElement.Css).Execute();
+
+                        // scope to this step's shadow root, so a path with more than one shadow root walks through
+                        // each in turn
+                        inElement = contextType.gPalElement;
+                    }
                 }
-                else if (ElementType.ShadowRoot == contextType.elementType)
-                {
-                    if (true == UseOttoMagic)
-                        MagicHelper.SwitchToShadowRoot(contextType.gPalElement.Css);
-                    else if (true == UsePuppeteer)
-                        PuppeteerClient.SwitchToShadowRoot(contextType.gPalElement.Css).Execute();
 
-                    // scope to this step's shadow root, so a path with more than one shadow root walks through
-                    // each in turn
-                    inElement = contextType.gPalElement;
+                ElementHelper.FindWebElements(
+                    this, CurrentUOW, shadowDomSelector, out _, out var tempElems, inElement);
+
+                if (tempElems?.Count > 0)
+                {
+                    var shadowElement = new UnitOfWork.WebElementWithType(
+                        shadowDomSelector, tempElems[0], ElementType.ShadowRoot);
+
+                    CurrentUOW.ShadowRoot = tempElems[0];
+                    CurrentUOW.ShadowRoot.IsShadowRoot = true;
+
+                    CurrentUOW.ContextPath ??= new List<UnitOfWork.WebElementWithType>();
+                    CurrentUOW.ContextPath.Add(shadowElement);
+
+                    // the engine searches inside the root from here; Selenium keeps the root object for it
+                    if (true == UseOttoMagic)
+                    {
+                        // OttoMagic switches into the root by the host's Css; there is no root object to keep
+                    }
+                    else if (true == UsePuppeteer)
+                    {
+                        // Puppeteer switches into the root by the host's Css; there is no root object to keep
+                    }
+                    else if (true == UseSelenium)
+                    {
+                        ISearchContext shadowRoot = null;
+
+                        // Use WebDriver's GetShadowRoot, which throws only when there is no open root.
+                        // ExecuteJavaScriptObj returns null for both a closed root and a failed script, and a wrong null
+                        // marks an open root closed, so searches return the host instead of its children.
+                        try
+                        {
+                            shadowRoot = ((IWebElement)tempElems[0].WebElement).GetShadowRoot();
+                        }
+                        catch
+                        {
+                            // closed, handled below
+                        }
+
+                        if (null != shadowRoot)
+                            CurrentUOW.ShadowRoot.WebElement = shadowRoot;  // dynamic - the search dispatches to it at runtime
+                        else
+                        {
+                            CurrentUOW.ShadowRoot.IsClosedShadowRoot = true;
+                            // webdriver cannot reach a closed shadow root: arguments[0].shadowRoot is null and
+                            // GetShadowRoot throws. The host element stays in place, so clicks have a real position and
+                            // searches stay scoped to the host instead of the whole document.
+                            GPAL.PublishSimpleEvent(GPALEventType.WARNING, $"Closed shadow root for selector [{shadowDomSelector.Name}]. Will return host element for searches inside.", this, GPALObjectType.Browser);
+                        }
+                    }
                 }
             }
-
-            ElementHelper.FindWebElements(
-                this, CurrentUOW, shadowDomSelector, out _, out var tempElems, inElement);
-
-            if (tempElems?.Count > 0)
+            catch (GPALException)
             {
-                var shadowElement = new UnitOfWork.WebElementWithType(
-                    shadowDomSelector, tempElems[0], ElementType.ShadowRoot);
-
-                CurrentUOW.ShadowRoot = tempElems[0];
-                CurrentUOW.ShadowRoot.IsShadowRoot = true;
-
-                CurrentUOW.ContextPath ??= new List<UnitOfWork.WebElementWithType>();
-                CurrentUOW.ContextPath.Add(shadowElement);
-
-                // the engine searches inside the root from here; Selenium keeps the root object for it
-                if (true == UseOttoMagic)
-                {
-                    // OttoMagic switches into the root by the host's Css; there is no root object to keep
-                }
-                else if (true == UsePuppeteer)
-                {
-                    // Puppeteer switches into the root by the host's Css; there is no root object to keep
-                }
-                else if (true == UseSelenium)
-                {
-                    ISearchContext shadowRoot = null;
-
-                    // Use WebDriver's GetShadowRoot, which throws only when there is no open root.
-                    // ExecuteJavaScriptObj returns null for both a closed root and a failed script, and a wrong null
-                    // marks an open root closed, so searches return the host instead of its children.
-                    try
-                    {
-                        shadowRoot = ((IWebElement)tempElems[0].WebElement).GetShadowRoot();
-                    }
-                    catch
-                    {
-                        // closed, handled below
-                    }
-
-                    if (null != shadowRoot)
-                        CurrentUOW.ShadowRoot.WebElement = shadowRoot;  // dynamic - the search dispatches to it at runtime
-                    else
-                    {
-                        CurrentUOW.ShadowRoot.IsClosedShadowRoot = true;
-                        // webdriver cannot reach a closed shadow root: arguments[0].shadowRoot is null and
-                        // GetShadowRoot throws. The host element stays in place, so clicks have a real position and
-                        // searches stay scoped to the host instead of the whole document.
-                        GPAL.PublishSimpleEvent(GPALEventType.WARNING, $"Closed shadow root for selector [{shadowDomSelector.Name}]. Will return host element for searches inside.", this, GPALObjectType.Browser);
-                    }
-                }
+                throw;
+            }
+            catch (Exception ex)
+            {
+                GPAL.PublishSimpleEvent(GPALEventType.EXCEPTION, "Unable to enter the shadow root", this, GPALObjectType.Browser, ex);
             }
 
             return this;
@@ -704,14 +726,26 @@ namespace GenerallyPositive.Browser
             CurrentUOW.ShadowRoot = null;
             CurrentUOW.ContextPath?.Clear();
 
-            if (true == UseOttoMagic)
-                MagicHelper.SwitchToDefaultContent();
-            else if (true == UsePuppeteer)
-                PuppeteerClient.SwitchToDefaultContent().Execute();
-            else if (true == UseSelenium)
-                this.BrowserDriver.SwitchTo().DefaultContent();
+            try
+            {
+                if (true == UseOttoMagic)
+                    MagicHelper.SwitchToDefaultContent();
+                else if (true == UsePuppeteer)
+                    PuppeteerClient.SwitchToDefaultContent().Execute();
+                else if (true == UseSelenium)
+                    this.BrowserDriver.SwitchTo().DefaultContent();
 
-            GPAL.PublishSimpleEvent(GPALEventType.DEBUG, "Returned to main document", CurrentUOW);
+                GPAL.PublishSimpleEvent(GPALEventType.DEBUG, "Returned to main document", CurrentUOW);
+            }
+            catch (GPALException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                GPAL.PublishSimpleEvent(GPALEventType.EXCEPTION, "Unable to return to the main document", this, GPALObjectType.Browser, ex);
+            }
+
             return this;
         }
 

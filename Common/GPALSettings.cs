@@ -230,6 +230,7 @@ namespace GenerallyPositive
                 PublishToConsole = false;
             else
                 PublishToConsole = true;
+            GPAL.PublishVersion();
             return this;
         }
 

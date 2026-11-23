@@ -577,6 +577,7 @@ namespace GenerallyPositive
                 GPALSettings.PublishToConsole = false;
             else
                 GPALSettings.PublishToConsole = true;
+            GPAL.PublishVersion();
             return (IAllowGPALSettings)GPALSettings;
         }
         /// <summary>

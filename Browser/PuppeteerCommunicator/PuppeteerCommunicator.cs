@@ -191,7 +191,6 @@ namespace GenerallyPositive.Browser
         // and the command sent again. Not "Not attached to an active page": attaching sends to that same page, gets the
         // same answer and attaches again, without end.
         static readonly string[] DeadSessionAnswers = { "Session with given id not found." };
-        bool supressedMessage = false;
         string lastSessionToken;
         // Instance field; a static one would let closing one browser block every other browser.
         bool inExit = false;
@@ -760,12 +759,6 @@ namespace GenerallyPositive.Browser
                                 {
                                     lastErrorMessage.Add(msg);
                                     GPAL.PublishSimpleEvent(true == notRendered ? GPALEventType.INFO : GPALEventType.ERROR, msg, this, GPALObjectType.PuppeteerCommunicator);
-                                    supressedMessage = false;
-                                }
-                                else if (false == supressedMessage)
-                                {
-                                    GPAL.PublishSimpleEvent(GPALEventType.INFO, "Supressing repeat messages", msg, GPALObjectType.Other);
-                                    supressedMessage = true;
                                 }
 
                                 throw new ApplicationException(msg);
@@ -793,12 +786,6 @@ namespace GenerallyPositive.Browser
                                 {
                                     lastErrorMessage.Add(msg);
                                     GPAL.PublishSimpleEvent(true == notRendered ? GPALEventType.INFO : GPALEventType.ERROR, msg, this, GPALObjectType.PuppeteerCommunicator);
-                                    supressedMessage = false;
-                                }
-                                else if (false == supressedMessage)
-                                {
-                                    GPAL.PublishSimpleEvent(GPALEventType.INFO, "Supressing repeat messages", msg, GPALObjectType.Other);
-                                    supressedMessage = true;
                                 }
 
                                 throw new ApplicationException(msg);
@@ -819,12 +806,6 @@ namespace GenerallyPositive.Browser
                             {
                                 lastErrorMessage.Add(msg);
                                 GPAL.PublishSimpleEvent(GPALEventType.WARNING, msg, this, GPALObjectType.PuppeteerCommunicator);
-                                supressedMessage = false;
-                            }
-                            else if (false == reported && false == supressedMessage)
-                            {
-                                GPAL.PublishSimpleEvent(GPALEventType.INFO, "Supressing repeat messages", msg, GPALObjectType.Other);
-                                supressedMessage = true;
                             }
                             return null;
                         }

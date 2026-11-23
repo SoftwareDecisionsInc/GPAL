@@ -206,19 +206,31 @@ namespace GenerallyPositive.Browser
             {
                 if ((true == browser?.BrowserSettings.WaitOnDocumentReady && true == hasURL) || true == overrideSetting)
                 {
-                    GPAL.PublishSimpleEvent(GPALEventType.INFO, $"Waiting up to [{browser.BrowserSettings.WaitForDocumentReadyTimeoutMs}] ms on document.ready");
+                    var sw = Stopwatch.StartNew();
+                    bool ready;
+                    string status;
 
                     // nav-error means the navigation failed; stop instead of polling to the timeout.
                     if (true == browser?.UseOttoMagic)
-                        WaitForValueOrTime(browser, "complete, interactive, nav-error", () => ReadyStatusOrNavError(browser, sessionToken), browser.BrowserSettings.WaitForDocumentReadyTimeoutMs);
+                        ready = WaitForValueOrTime(browser, "complete, interactive, nav-error", () => ReadyStatusOrNavError(browser, sessionToken), browser.BrowserSettings.WaitForDocumentReadyTimeoutMs, out status);
                     else if (true == browser?.UsePuppeteer)
-                        WaitForValueOrTime(browser, "complete, interactive", () => ((PuppeteerClient)browser.PuppeteerClient).GetReadyStatus(sessionToken).Execute<object>(), browser.BrowserSettings.WaitForDocumentReadyTimeoutMs);
+                        ready = WaitForValueOrTime(browser, "complete, interactive", () => ((PuppeteerClient)browser.PuppeteerClient).GetReadyStatus(sessionToken).Execute<object>(), browser.BrowserSettings.WaitForDocumentReadyTimeoutMs, out status);
                     else    // handles selenium
-                        WaitForValueOrTime(browser, "complete, interactive", () => JsCheckReadyState(browser, sessionToken), browser.BrowserSettings.WaitForDocumentReadyTimeoutMs);
+                        ready = WaitForValueOrTime(browser, "complete, interactive", () => JsCheckReadyState(browser, sessionToken), browser.BrowserSettings.WaitForDocumentReadyTimeoutMs, out status);
+
+                    // one line for the wait: the status it ended on, how long it took and what it allowed. A wait that
+                    // ran out is a warning; the workflow carries on, as it always has
+                    status = status?.Trim().Trim('"');
+
+                    // a browser that is gone was never asked, and says so elsewhere
+                    if (true == ready)
+                        GPAL.PublishSimpleEvent(GPALEventType.INFO, $"Document.ready status [{status}] in [{sw.ElapsedMilliseconds}] ms of [{browser.BrowserSettings.WaitForDocumentReadyTimeoutMs}] ms", browser, GPALObjectType.Browser);
+                    else if (null != status)
+                        GPAL.PublishSimpleEvent(GPALEventType.WARNING, $"Document.ready status still [{status}] after [{sw.ElapsedMilliseconds}] ms of [{browser.BrowserSettings.WaitForDocumentReadyTimeoutMs}] ms; continuing", browser, GPALObjectType.Browser);
                 }
                 else if (true == browser.BrowserSettings.WaitOnNetworkIdle && true == hasURL)
                 {
-                    WaitForValueOrTime(browser, "true", () => WaitForNetworkIdle(browser, browser.BrowserSettings.NetworkIdleMaxConnections, browser.BrowserSettings.NetworkIdlePruneMs, sessionToken).ToString(), browser.BrowserSettings.NetworkIdleTimeoutMs, NetworkIdlePollMs);
+                    WaitForValueOrTime(browser, "true", () => WaitForNetworkIdle(browser, browser.BrowserSettings.NetworkIdleMaxConnections, browser.BrowserSettings.NetworkIdlePruneMs, sessionToken).ToString(), browser.BrowserSettings.NetworkIdleTimeoutMs, out _, NetworkIdlePollMs);
                     }
                 }
             finally
@@ -266,7 +278,6 @@ namespace GenerallyPositive.Browser
             if (lastSessionToken != sessionToken)
             {
                 lastErrorMessage.Clear();
-                supressedMessage = false;
                 lastSessionToken = sessionToken;
             }
 
@@ -311,18 +322,13 @@ namespace GenerallyPositive.Browser
                     null, GPALObjectType.None, ex);
             }
 
+            // each status read once, as DEBUG; CheckDocumentReady publishes the result of the wait
             string currentErrorMessage = $"Document.Ready status [{readyState}]";
 
             if (false == lastErrorMessage.Contains(currentErrorMessage))
             {
                 lastErrorMessage.Add(currentErrorMessage);
-                GPAL.PublishSimpleEvent(GPALEventType.INFO, currentErrorMessage);
-                supressedMessage = false;
-            }
-            else if (false == supressedMessage)
-            {
-                GPAL.PublishSimpleEvent(GPALEventType.INFO, "Supressing repeat messages", currentErrorMessage, GPALObjectType.Other);
-                supressedMessage = true;
+                GPAL.PublishSimpleEvent(GPALEventType.DEBUG, currentErrorMessage);
             }
 
             return readyState;
@@ -687,11 +693,16 @@ namespace GenerallyPositive.Browser
         /// <param name="resultsExpected">string or csv string list of expected return results</param>
         /// <param name="action">method and parms to call repeatedly</param>
         /// <param name="timeOutAfterMs">time to wait in milliseconds for the expected result before timing out</param>
+        /// <param name="lastValue">The last value the method gave, as it gave it; "no answer" when it gave nothing, and
+        /// null when it was never called because the browser is gone</param>
         /// <param name="pollMs">time to wait in milliseconds between calls</param>
-        internal static void WaitForValueOrTime(Browser browser, string resultsExpected, Func<dynamic> action, int timeOutAfterMs, int pollMs = WaitForValuePollMs)
+        /// <returns>True when an expected value came before the time ran out</returns>
+        internal static bool WaitForValueOrTime(Browser browser, string resultsExpected, Func<dynamic> action, int timeOutAfterMs, out string lastValue, int pollMs = WaitForValuePollMs)
         {
             DateTime timeout = DateTime.Now.AddMilliseconds(timeOutAfterMs);
-            string taskReturnValue;
+            bool retVal = false;
+
+            lastValue = null;
             // Trim each expected value; callers put a space after each comma.
             string[] tokens = resultsExpected.Split(',').Select(token => token.Trim()).ToArray();
 
@@ -699,6 +710,7 @@ namespace GenerallyPositive.Browser
                 do
                 {
                     dynamic result = action();
+                    string read;
 
                     try
                     {
@@ -709,28 +721,30 @@ namespace GenerallyPositive.Browser
                         // If generic Task<T>, get the Result property
                         var taskType = task.GetType();
                         if (taskType.IsGenericType)
-                        {
-                            var taskResult = taskType.GetProperty("Result")?.GetValue(task);
-                            taskReturnValue = taskResult?.ToString() ?? resultsExpected;
-                        }
+                            read = taskType.GetProperty("Result")?.GetValue(task)?.ToString();
                         else
-                        {
-                            taskReturnValue = tokens[0]; // non-generic Task
-                        }
+                            read = tokens[0]; // non-generic Task
                     }
                     catch
                     {
                         // not a Task: use the value as a string
-                        taskReturnValue = result?.ToString() ?? resultsExpected;
+                        read = result?.ToString();
                     }
+
+                    // no answer counts as the expected value, as it always has; what was read is reported as it was
+                    string taskReturnValue = read ?? resultsExpected;
+                    lastValue = read ?? "no answer";
 
                     foreach (string token in tokens)
                         if (true == taskReturnValue.ToLower().Contains(token))
-                            return;
+                            retVal = true;
 
-                    Thread.Sleep(pollMs);
+                    if (false == retVal)
+                        Thread.Sleep(pollMs);
                 }
-                while (DateTime.Now < timeout);
+                while (false == retVal && DateTime.Now < timeout);
+
+            return retVal;
         }
 
         /// <summary>
@@ -781,7 +795,6 @@ namespace GenerallyPositive.Browser
             if (lastSessionToken != sessionToken)
             {
                 lastErrorMessage.Clear();
-                supressedMessage = false;
                 lastSessionToken = sessionToken;
             }
 
@@ -791,12 +804,6 @@ namespace GenerallyPositive.Browser
             {
                 lastErrorMessage.Add(currentErrorMessage);
                 GPAL.PublishSimpleEvent(GPALEventType.INFO, currentErrorMessage, browser, GPALObjectType.Browser);
-                supressedMessage = false;
-            }
-            else if (false == supressedMessage)
-            {
-                GPAL.PublishSimpleEvent(GPALEventType.INFO, "Supressing repeat messages", currentErrorMessage, GPALObjectType.Other);
-                supressedMessage = true;
             }
 
             // Chrome and Edge count the tab's requests on GPAL's own connection to the browser, so an ask runs nothing
@@ -823,12 +830,6 @@ namespace GenerallyPositive.Browser
             {
                 lastErrorMessage.Add(currentErrorMessage);
                 GPAL.PublishSimpleEvent(GPALEventType.INFO, currentErrorMessage, browser, GPALObjectType.Browser);
-                supressedMessage = false;
-            }
-            else if (false == supressedMessage)
-            {
-                GPAL.PublishSimpleEvent(GPALEventType.INFO, "Supressing repeat messages", currentErrorMessage, GPALObjectType.Other);
-                supressedMessage = true;
             }
             return retVal;
         }

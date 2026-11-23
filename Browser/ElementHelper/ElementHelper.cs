@@ -52,8 +52,11 @@ namespace GenerallyPositive.Browser
     {
         // to avoid repeat messages for the same selector when waiting for a selector
         static List<string> listOfMessages = new List<string>();
-        static bool supressedMessage = false;
         static Selector lastSelector = null;
+        // What the last FindWebElements on this thread found, with the selector path in full, for WaitFor to publish once
+        // its wait is over; the wait's line is the only one that gives the path whole. Per thread, so browsers run in
+        // parallel do not publish one another's searches
+        [ThreadStatic] static string lastFoundFullMessage;
 
         // how hard ScrollUntilVisible works before it gives up and lets the workflow carry on
         const int VisibilitySettleChecks = 4;    // rechecks after a scroll, to ride out a header sliding in

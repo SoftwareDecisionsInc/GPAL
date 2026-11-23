@@ -45,7 +45,10 @@ namespace GenerallyPositive.Application
 
         // to avoid repeat messages for the same selector when waiting for a selector
         static List<string> listOfMessages = new List<string>();
-        static bool supressedMessage = false;
         static Selector lastSelector = null;
+        // What the last FindElements on this thread found, with the selector path in full, for WaitFor to publish once
+        // its wait is over; the wait's line is the only one that gives the path whole. Per thread, so applications run
+        // in parallel do not publish one another's searches
+        [ThreadStatic] static string lastFoundFullMessage;
     }
 }

@@ -53,7 +53,6 @@ namespace GenerallyPositive.Browser
         private const int OttoHandshakeGateTimeoutMs = 60_000;
 
         List<string> lastErrorMessage = new List<string>();
-        bool supressedMessage = false;
         string lastSessionToken;
         IBrowser browser { get; set; } = null;
 

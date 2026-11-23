@@ -135,6 +135,9 @@ namespace GenerallyPositive
                     PublishSimpleEvent(GPALEventType.NOTICE, $">>> Application Start Time: [{_startTime.ToString("yyyy-MM-dd HH:mm:ss")}] <<<");
                 }
 
+                // the lines reached the console only when GPAL.yaml turned it on; otherwise WithPublishToConsole writes them
+                versionPublished = true == PublishToConsole && (ConsoleEvents.HasFlag(GPALEventType.INFO) || ConsoleEvents.HasFlag(GPALEventType.NOTICE));
+
                 SetCatchUncaughtExceptions();
 
                 // GDI text, which draws emoji and matches the rest of Windows; the GDI+ default draws emoji as empty
@@ -156,6 +159,30 @@ namespace GenerallyPositive
                 }
 
                 inStaticInit = false;
+            }
+        }
+
+        // true once the version and start time lines have gone to the console
+        private static bool versionPublished = false;
+
+        // Writes the GPAL version and start time lines to the console when they have not reached it yet. Called from
+        // WithPublishToConsole, so a program that turns the console on itself gets them as its first lines
+        internal static void PublishVersion()
+        {
+            if (false == versionPublished && true == PublishToConsole)
+            {
+                if (ConsoleEvents.HasFlag(GPALEventType.INFO))
+                {
+                    versionPublished = true;
+                    PublishSimpleEvent(GPALEventType.INFO, $">>> GPAL v[{GPAL.Version}]");
+                    PublishSimpleEvent(GPALEventType.INFO, $">>> Application Start Time: [{_startTime.ToString("yyyy-MM-dd HH:mm:ss")}] <<<");
+                }
+                else if (ConsoleEvents.HasFlag(GPALEventType.NOTICE))
+                {
+                    versionPublished = true;
+                    PublishSimpleEvent(GPALEventType.NOTICE, $">>> GPAL v[{GPAL.Version}]");
+                    PublishSimpleEvent(GPALEventType.NOTICE, $">>> Application Start Time: [{_startTime.ToString("yyyy-MM-dd HH:mm:ss")}] <<<");
+                }
             }
         }
     }

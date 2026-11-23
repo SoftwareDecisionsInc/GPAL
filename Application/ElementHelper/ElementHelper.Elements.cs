@@ -50,7 +50,7 @@ namespace GenerallyPositive.Application
         /// <param name="automationElement">Optional root AutomationElement to search within; defaults to the application's root element</param>
         /// <param name="callIfHandler">Whether to invoke the selector's CallIfFound/CallIfNotFound handlers based on the results</param>
         /// <returns>All elements found for the selector, regardless of whether they matched</returns>
-        public static ReadOnlyCollection<GPALAutomationElement> FindElements(Application application, UnitOfWork currentUOW, Selector selector, out bool matchedAll, out List<GPALAutomationElement> matchedElements, AutomationElement automationElement = null, bool callIfHandler = true)
+        public static ReadOnlyCollection<GPALAutomationElement> FindElements(Application application, UnitOfWork currentUOW, Selector selector, out bool matchedAll, out List<GPALAutomationElement> matchedElements, AutomationElement automationElement = null, bool callIfHandler = true, bool publish = true)
         {
             ReadOnlyCollection<GPALAutomationElement> retElems = null;
             List<GPALAutomationElement> matchedElems = new List<GPALAutomationElement>();
@@ -66,11 +66,11 @@ namespace GenerallyPositive.Application
             matchedElements = new List<GPALAutomationElement>();
 
             currentUOW.CurrentSelector = selector;
+            lastFoundFullMessage = null;
 
             if (false == lastSelector?.Name.Equals(selector.Name))
             {
                 listOfMessages.Clear();
-                supressedMessage = false;
                 lastSelector = selector;
             }
             else if (null == lastSelector)
@@ -94,14 +94,6 @@ namespace GenerallyPositive.Application
 
                 try
                 {
-                    message = $"Searching for elements for selector [{selector.Name}] using [{selectorPathEntry.SelectorPathType}] [{abbreviatedText}]";
-
-                    if (false == listOfMessages.Contains(message))
-                    {
-                        listOfMessages.Add(message);
-                        GPAL.PublishSimpleEvent(GPALEventType.INFO, message, application, GPALObjectType.Application);
-                    }
-
                     // A finder that throws counts as finding nothing, so the next selector path is tried, as in the
                     // browser version. A finder that returns null, such as an image not on screen, found nothing too.
                     try
@@ -241,25 +233,29 @@ namespace GenerallyPositive.Application
 
                 selector.ElementsFoundAndMatchedCount = matchedElements.Count();
 
-                message = $"[{retElems?.Count ?? 0}] elements found for selector [{selector.Name}]";
+                // one line for the search: what it found, what of that matched when there were criteria,
+                // and the selector path that was used
+                string matchedPart = string.Empty;
 
+                if (0 < retElems?.Count && (true == selector.AnyMatchCriteria() || Int32.MaxValue != currentUOW.WithAllThatMatch))
+                {
+                    var matchCount = selector.MatchCriteria.Count > 0 ? selector.MatchCriteria.Count.ToString() : $"WithAllThatMatch({currentUOW.WithAllThatMatch})";
+
+                    if ((true == matchCount.Contains("WithAllThatMatch") && 1 < currentUOW.WithAllThatMatch) || 0 < selector.MatchCriteria.Count)
+                        matchedPart = $", [{matchedElements.Count}] matched with [{matchCount}] match criteria";
+                }
+
+                message = $"[{retElems?.Count ?? 0}] elements found{matchedPart} for selector [{selector.Name}] using [{selectorPathEntry.SelectorPathType}] [{abbreviatedText}]";
+                lastFoundFullMessage = $"[{retElems?.Count ?? 0}] elements found{matchedPart} for selector [{selector.Name}] using [{selectorPathEntry.SelectorPathType}] [{selectorPathEntry.SelectorPath}]";
+
+                // A repeat of the same search is not published again. A WaitFor poll publishes nothing but still counts
+                // as seen, for every selector path it tried, so the action's own search after the wait repeats none of it
                 if (false == listOfMessages.Contains(message))
                 {
                     listOfMessages.Add(message);
-                    GPAL.PublishSimpleEvent(GPALEventType.INFO, message, application, GPALObjectType.Application);
 
-                    if (0 < retElems?.Count && (true == selector.AnyMatchCriteria() || Int32.MaxValue != currentUOW.WithAllThatMatch))
-                    {
-                        var matchCount = selector.MatchCriteria.Count > 0 ? selector.MatchCriteria.Count.ToString() : $"WithAllThatMatch({currentUOW.WithAllThatMatch})";
-
-                        if ((true == matchCount.Contains("WithAllThatMatch") && 1 < currentUOW.WithAllThatMatch) || 0 < selector.MatchCriteria.Count)
-                            GPAL.PublishSimpleEvent(GPALEventType.INFO, $"[{matchedElements.Count}] elements matched for selector [{selector.Name}] with [{matchCount}] match criteria", application, GPALObjectType.Application);
-                    }
-                }
-                else if (false == supressedMessage)
-                {
-                    GPAL.PublishSimpleEvent(GPALEventType.INFO, "Supressing repeat messages", application, GPALObjectType.Application);
-                    supressedMessage = true;
+                    if (true == publish)
+                        GPAL.PublishSimpleEvent(GPALEventType.INFO, message, application, GPALObjectType.Application);
                 }
 
                 // CAVEAT: once a path finds elements, the later paths are not tried, even if they would find different elements.
@@ -1530,19 +1526,29 @@ namespace GenerallyPositive.Application
             if (WaitTime.Forever == timeoutInTicks)
                 timeoutInTicks = Int32.MaxValue;    // forever
 
+            // the start of the wait, at DEBUG: INFO gets one line when the wait is over
+            GPAL.PublishSimpleEvent(GPALEventType.DEBUG, $"Waiting up to [{timeoutInTicks}] ms for elements matching selector [{selector.Name}][{selector.SelectorPath}]", application, GPALObjectType.Application);
+
             // Search until something matches the selector's criteria or the time is up, as in the browser version: a
             // control that is found but does not match is not what the wait is for. The clock counts the time the
             // searches take as well as the sleeps. The polls run no CallIf handlers; the action's own search runs them.
             var sw = Stopwatch.StartNew();
             do
             {
-                elements = FindElements(application, application.CurrentUOW, selector, out matchedAll2, out matchedElements2, element, false);
+                // the polls publish nothing; the wait publishes one line when it is over
+                elements = FindElements(application, application.CurrentUOW, selector, out matchedAll2, out matchedElements2, element, false, publish: false);
 
                 // sleep only while time remains, so the sleep time is never negative
                 if (0 == (matchedElements2?.Count ?? 0) && WaitTime.Immediate != timeoutInTicks && sw.ElapsedMilliseconds < timeoutInTicks)
                     Thread.Sleep((int)Math.Min(1000, timeoutInTicks - sw.ElapsedMilliseconds));
 
             } while (sw.ElapsedMilliseconds < timeoutInTicks && 0 == (matchedElements2?.Count ?? 0));
+
+            // what the last search found, with its path in full, how long the wait took and what it allowed, as in the
+            // browser version
+            string found = lastFoundFullMessage ?? $"[0] elements found for selector [{selector.Name}]";
+
+            GPAL.PublishSimpleEvent(GPALEventType.INFO, $"{found} in [{sw.ElapsedMilliseconds}] ms of {(Int32.MaxValue == timeoutInTicks ? "[forever]" : $"[{timeoutInTicks}] ms")}", application, GPALObjectType.Application);
 
             matchedAll = matchedAll2;                   // the last lookup's answer, as in the browser version
             matchedElements = matchedElements2;         // always use matched, it's either all or those matched
