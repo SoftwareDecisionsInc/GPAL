@@ -10,6 +10,14 @@ Changes that would break a working program wait for 2.0. Everything below still 
 - BrowserHelper.KillAllRunningProcesses(bool, IBrowser) is removed; call KillAllRunningProcesses(IBrowser)
 - WithServiceAccountKey(GoogleServiceAccountKey) is removed and GoogleServiceAccountKey is internal; pass the key file
 
+## 1.1.4
+
+### GPAL
+
+#### Changed
+
+- GPAL is licensed under the Apache License 2.0, and so is every earlier version
+
 ## 1.1.3
 
 ### GPAL

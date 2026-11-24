@@ -110,11 +110,13 @@ GPAL.Image needs a 64-bit process, since OpenCV ships its native library for 64-
 or turn off Prefer 32-bit on an AnyCPU program; in a 32-bit process Register() registers nothing and publishes
 a warning.
 
-.NET Framework 4.8. Add the optional **GPALRestAPI** and the **OttoMagic** browser extension for
-REST driven browser automation and smarter element detection, and **OttoMatic** to record a workflow by
-doing it once.
+GPAL runs on Windows, on .NET 10 (target net10.0-windows) and .NET Framework 4.8. Add the optional
+**GPALRestAPI** and the **OttoMagic** browser extension for REST driven browser automation and smarter element
+detection, and **OttoMatic** to record a workflow by doing it once.
 
 Full documentation, tutorials and the API reference: **https://gpal.sditx.com/**
+
+What is coming next, and roughly when: **https://gpal.sditx.com/compare#roadmap**
 
 ---
 
@@ -135,15 +137,11 @@ Related products developed under Software Decisions, Inc.:
 
 ## License
 
-GPAL is source available under the **Business Source License 1.1**, with an Additional Use Grant that
-permits production use, including commercial, internal, hosted and revenue generating, provided you are
-not offering GPAL itself to third parties as a competing product or service.
+GPAL is open source under the **Apache License, Version 2.0**. Use it free of charge in any project,
+personal or commercial. Every earlier release, including 1.1.3 and all versions before it, is also
+licensed under the Apache License 2.0. Full terms: [LICENSE.md](./LICENSE.md).
 
-On the Change Date, the earlier of January 1 2031 or four years after a version is first distributed, it
-becomes **GPL v3.0 or later**. Full terms, including the Additional Use Grant and the Continuity
-Guarantee: [LICENSE.md](./LICENSE.md).
-
-Copyright © 2026 Software Decisions, Inc. All rights reserved.
+Copyright © 2026 Software Decisions, Inc.
 
 *This repository is a read only public release mirror. Development happens privately, and pull requests
 are not accepted here.*
